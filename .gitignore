@@ -1,0 +1,15 @@
+# --- GİZLİ DOSYALAR (Bunlar ASLA GitHub'a gitmez) ---
+.env
+.env.local
+
+# --- Gereksiz Python Dosyaları ---
+__pycache__/
+*.py[cod]
+
+# --- Sanal Ortam (Çok şişkin olduğu için gitmez) ---
+venv/
+env/
+.venv/
+
+# --- Mac/Windows Çöpleri ---
+.DS_Store
