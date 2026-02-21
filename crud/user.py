@@ -24,3 +24,29 @@ def create_user(db: Session, user: user_schema.UserCreate):
     db.refresh(db_user)  # Veritabanının atadığı ID'yi almak için modeli yenile
     
     return db_user
+
+# 4. Kullanıcıları listele (Read - Çoklu)
+def list_users(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.User).offset(skip).limit(limit).all()
+
+# 5. Kullanıcıyı güncelle (Update)
+def update_user(db: Session, user_id: int, user_update: user_schema.UserUpdate):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        return None
+    update_data = user_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+# 6. Kullanıcıyı sil (Delete)
+def delete_user(db: Session, user_id: int):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        return None
+    db.delete(db_user)
+    db.commit()
+    return db_user

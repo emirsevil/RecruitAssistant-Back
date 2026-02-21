@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 2. Adresi al
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./test.db"
 
 # 3. Motoru (Engine) oluştur. Bu, veritabanına giden tüneldir.
 engine = create_engine(SQLALCHEMY_DATABASE_URL)

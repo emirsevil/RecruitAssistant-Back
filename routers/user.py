@@ -38,4 +38,24 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     if db_user is None:
         # Eğer o ID'de bir kullanıcı yoksa 404 Not Found hatası ver
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+
+# 3. Kullanıcıları listele (Read - Çoklu)
+@router.get("/", response_model=list[schemas.UserResponse])
+def list_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return crud.list_users(db=db, skip=skip, limit=limit)
+
+# 4. Kullanıcıyı güncelle (Update)
+@router.put("/{user_id}", response_model=schemas.UserResponse)
+def update_user(user_id: int, user: schemas.UserUpdate, db: Session = Depends(get_db)):
+    db_user = crud.update_user(db=db, user_id=user_id, user_update=user)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+    return db_user
+
+# 5. Kullanıcıyı sil (Delete)
+@router.delete("/{user_id}", response_model=schemas.UserResponse)
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = crud.delete_user(db=db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
     return db_user

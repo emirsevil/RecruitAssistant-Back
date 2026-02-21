@@ -21,4 +21,10 @@ class UserResponse(UserBase):
     created_at: datetime
 
     # SQLAlchemy modelleriyle uyumlu çalışabilmesi için gereken ayar:
-    model_config = {"from_attributes": True}
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    university: Optional[str] = None
+
+    class Config:
+        orm_mode = True
