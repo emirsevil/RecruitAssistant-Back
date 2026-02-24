@@ -43,9 +43,10 @@ class Workspace(Base):
 
     # İlişkiler
     owner = relationship("User", back_populates="workspaces")
+    generated_cv = relationship("CV", foreign_keys=[generated_cv_id], uselist=False)
     quizzes = relationship("Quiz", back_populates="workspace")
     interviews = relationship("Interview", back_populates="workspace")
-    cover_letters = relationship("CoverLetter", back_populates="workspace") # YENİ EKLENDİ
+    cover_letters = relationship("CoverLetter", back_populates="workspace")
 
 # 4. COVER LETTER (Niyet Mektupları Tablosu) - YENİ EKLENDİ
 class CoverLetter(Base):

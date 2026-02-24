@@ -2,6 +2,7 @@ from fastapi import FastAPI
 import models
 from database import engine
 from routers import quiz
+from routers.workspace import router as workspace_router
 
 # --- KRİTİK NOKTA ---
 # Bu kod çalışınca SQLAlchemy gider, models.py'ye bakar
@@ -12,6 +13,7 @@ app = FastAPI()
 
 # Include routers
 app.include_router(quiz.router)
+app.include_router(workspace_router)
 
 @app.get("/")
 def read_root():
