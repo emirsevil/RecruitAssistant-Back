@@ -13,3 +13,7 @@ env/
 
 # --- Mac/Windows Çöpleri ---
 .DS_Store
+# --- Veritabanı (Commitlenmemeli) ---
+*.db
+*.sqlite
+*.sqlite3
