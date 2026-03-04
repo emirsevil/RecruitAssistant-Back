@@ -18,6 +18,7 @@ def list_quizzes(db: Session, skip: int = 0, limit: int = 100, workspace_id: Opt
 def create_quiz(db: Session, quiz: quiz_schema.QuizCreate):
     db_quiz = models.Quiz(
         workspace_id=quiz.workspace_id,
+        title=quiz.title,
         question=quiz.question,
         options=quiz.options,
         correct_answer=quiz.correct_answer,

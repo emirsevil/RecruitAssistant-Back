@@ -67,11 +67,13 @@ class Quiz(Base):
     id = Column(Integer, primary_key=True, index=True)
     # Genel quizler için null kalabilir, o yüzden nullable=True yapıyoruz
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True) 
+    title = Column(String, nullable=True) # Konu başlığı (Örn: SQL, Java)
     
     question = Column(String, nullable=False)
     # Şıkları ["A", "B", "C", "D"] şeklinde liste olarak tutmak için JSON kullanıyoruz
     options = Column(JSON, nullable=False)  
     correct_answer = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     workspace = relationship("Workspace", back_populates="quizzes")
 

@@ -4,6 +4,7 @@ from typing import List, Optional
 
 class QuizBase(BaseModel):
     workspace_id: Optional[int] = None
+    title: Optional[str] = None
     question: str
     options: List[str]
 
@@ -15,6 +16,7 @@ class QuizCreate(QuizBase):
 
 class QuizUpdate(BaseModel):
     workspace_id: Optional[int] = None
+    title: Optional[str] = None
     question: Optional[str] = None
     options: Optional[List[str]] = None
     # correct_answer is not exposed in response, but can be updated
@@ -29,3 +31,7 @@ class QuizResponse(QuizBase):
 
     class Config:
         from_attributes = True
+
+class QuizGroupResponse(BaseModel):
+    title: str
+    questions: List[QuizResponse]
