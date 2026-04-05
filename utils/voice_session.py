@@ -82,9 +82,13 @@ class VoiceInterviewSession:
 
         # Async tasks
         self._tts_listener_task: Optional[asyncio.Task] = None
+        self._stt_listener_task: Optional[asyncio.Task] = None  # reserved for future STT streaming
 
         # Control flags
         self._is_running = False
+
+        # Evaluation results (stored for DB persistence)
+        self.last_evaluation: dict = {}
 
     async def start(self):
         """Initialize the session: generate questions, connect to Cartesia, speak intro."""
@@ -231,6 +235,12 @@ class VoiceInterviewSession:
                 print(f"Error cancelling TTS context: {e}")
             self._current_tts_context_id = None
 
+    async def handle_audio_chunk(self, audio_bytes: bytes):
+        """Handle raw microphone audio from the frontend (no-op: STT is done via REST /transcribe)."""
+        # Audio transcription is handled via the REST endpoint /voice-interview/transcribe.
+        # This method exists so the WebSocket handler can safely forward binary frames.
+        pass
+
     async def cleanup(self):
         """Close all connections and cancel tasks."""
         self._is_running = False
@@ -242,7 +252,7 @@ class VoiceInterviewSession:
             except Exception:
                 pass
 
-        # Cancel listener tasks
+        # Cancel listener tasks safely
         for task in [self._stt_listener_task, self._tts_listener_task]:
             if task and not task.done():
                 task.cancel()
@@ -297,8 +307,9 @@ class VoiceInterviewSession:
                 })
                 await self._speak_text(response_text, question_index=self.current_question_index)
             else:
-                # All questions done — speak wrap-up then evaluate
-                await self._speak_text(response_text, question_index=self.current_question_index - 1)
+                # All questions done — cancel TTS and run evaluation directly
+                # Don't speak wrap-up text to avoid audio leaking into evaluation screen
+                await self._cancel_tts()
                 await self._run_evaluation()
 
         elif action == "follow_up":
@@ -308,7 +319,7 @@ class VoiceInterviewSession:
 
         elif action == "wrap_up":
             self._save_current_answer()
-            await self._speak_text(response_text, question_index=self.current_question_index)
+            await self._cancel_tts()
             await self._run_evaluation()
 
     def _save_current_answer(self, passed: bool = False):
@@ -344,6 +355,10 @@ class VoiceInterviewSession:
             async for message in self._tts_ws:
                 if not self._is_running:
                     break
+
+                # Stop forwarding audio if we're done or evaluating
+                if self.state in ("evaluating", "done"):
+                    continue
 
                 try:
                     # Try to parse as JSON first
@@ -422,12 +437,18 @@ class VoiceInterviewSession:
 
     async def _run_evaluation(self):
         """Run final evaluation using existing ai_evaluator."""
+        # Cancel any active TTS before evaluating
+        await self._cancel_tts()
+
         if not self.qa_pairs:
-            await self.send_json({
-                "type": "evaluation",
+            self.last_evaluation = {
                 "results": [],
                 "overall_score": 0,
                 "overall_feedback": "Değerlendirilecek cevap bulunamadı.",
+            }
+            await self.send_json({
+                "type": "evaluation",
+                **self.last_evaluation,
             })
             await self.send_json({"type": "session_complete"})
             self.state = "done"
@@ -446,6 +467,9 @@ class VoiceInterviewSession:
                 language="tr",
             ),
         )
+
+        # Store for DB persistence
+        self.last_evaluation = evaluation
 
         await self.send_json({
             "type": "evaluation",
