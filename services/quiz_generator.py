@@ -31,14 +31,19 @@ def generate_quizzes_from_job_description(job_desc: str) -> List[Dict]:
     3. Provide exactly four options for each question as a JSON list of strings.
     4. Specify the 'correct_answer' which must match one of the options exactly.
     5. Each question object must include a 'title' field containing the name of the skill (e.g., "Python", "SQL").
+    6. Each question object must include a 'difficulty' field with one of these values: "Easy", "Medium", or "Hard".
+       - For each skill, include a balanced mix: roughly 2 Easy, 2-3 Medium, and 1-2 Hard questions.
+       - Easy: basic concepts and definitions
+       - Medium: applied knowledge and common patterns
+       - Hard: advanced edge cases, internals, and optimization
 
     Output ONLY a valid JSON array containing all questions for all skills. 
     Format:
     [
-      {{"title": "SkillName1", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
-      ... (5-7 questions for SkillName1)
-      {{"title": "SkillName2", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
-      ... (5-7 questions for SkillName2)
+      {{"title": "SkillName1", "difficulty": "Easy", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
+      {{"title": "SkillName1", "difficulty": "Medium", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
+      {{"title": "SkillName1", "difficulty": "Hard", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
+      ... (5-7 questions per skill with mixed difficulties)
     ]
 
     Job Description:
@@ -71,6 +76,10 @@ def generate_quizzes_from_job_description(job_desc: str) -> List[Dict]:
             if q.get("question") and isinstance(options, list) and q.get("correct_answer"):
                 q["title"] = title
                 q["options"] = options
+                difficulty = q.get("difficulty", "Medium")
+                if difficulty not in ("Easy", "Medium", "Hard"):
+                    difficulty = "Medium"
+                q["difficulty"] = difficulty
                 validated.append(q)
         return validated
     except Exception as e:

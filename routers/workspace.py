@@ -83,6 +83,7 @@ def generate_quizzes_for_workspace(workspace_id: int, db: Session = Depends(get_
         quiz_data = quiz_schema.QuizCreate(
             workspace_id=workspace_id,
             title=title,
+            difficulty=q.get("difficulty", "Medium"),
             question=q.get("question", ""),
             options=q.get("options", []),
             correct_answer=q.get("correct_answer", "")
