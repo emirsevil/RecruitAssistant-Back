@@ -102,6 +102,7 @@ class QuizScore(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
     quiz_title = Column(String, nullable=False)  # Skill/konu adı (Örn: "Python", "SQL")
+    difficulty = Column(String, nullable=False)  # Zorluk seviyesi (Örn: "Easy", "Medium", "Hard")
     score = Column(Integer, nullable=False)  # Yüzdelik skor (0-100)
     total_questions = Column(Integer, nullable=False)
     correct_answers = Column(Integer, nullable=False)

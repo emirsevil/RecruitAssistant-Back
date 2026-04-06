@@ -36,6 +36,7 @@ class QuizResponse(QuizBase):
 
 class QuizGroupResponse(BaseModel):
     title: str
+    difficulty: str
     questions: List[QuizResponse]
 
 
@@ -51,6 +52,7 @@ class QuizSubmit(BaseModel):
     user_id: int
     workspace_id: int
     quiz_title: str       # Hangi skill/konu grubu (Örn: "Python")
+    difficulty: str       # Hangi zorluk seviyesi (Örn: "Easy")
     answers: List[AnswerItem]
 
 class QuestionResult(BaseModel):
@@ -76,6 +78,7 @@ class QuizScoreResponse(BaseModel):
     user_id: int
     workspace_id: int
     quiz_title: str
+    difficulty: str
     score: int
     total_questions: int
     correct_answers: int

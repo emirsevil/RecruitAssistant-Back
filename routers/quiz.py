@@ -88,6 +88,7 @@ def submit_quiz(submission: schemas.QuizSubmit, db: Session = Depends(get_db)):
         user_id=submission.user_id,
         workspace_id=submission.workspace_id,
         quiz_title=submission.quiz_title,
+        difficulty=submission.difficulty,
         score=score_pct,
         total_questions=total,
         correct_answers=correct_count,

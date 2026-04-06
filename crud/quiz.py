@@ -55,12 +55,13 @@ def delete_quiz(db: Session, quiz_id: int):
 # --- Quiz Score CRUD ---
 
 def create_quiz_score(db: Session, user_id: int, workspace_id: int,
-                      quiz_title: str, score: int, total_questions: int,
-                      correct_answers: int):
+                      quiz_title: str, difficulty: str, score: int, 
+                      total_questions: int, correct_answers: int):
     db_score = models.QuizScore(
         user_id=user_id,
         workspace_id=workspace_id,
         quiz_title=quiz_title,
+        difficulty=difficulty,
         score=score,
         total_questions=total_questions,
         correct_answers=correct_answers,

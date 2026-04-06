@@ -31,7 +31,8 @@ def generate_quizzes_from_job_description(job_desc: str) -> List[Dict]:
     3. Provide exactly four options for each question as a JSON list of strings.
     4. Specify the 'correct_answer' which must match one of the options exactly.
     5. Each question object must include a 'title' field containing the name of the skill (e.g., "Python", "SQL").
-    6. Each question object must include a 'difficulty' field with one of these values: "Easy", "Medium", or "Hard".
+    6. MANDATORY: Each question must be UNIQUE. Do not repeat the same question or concept twice for the same skill.
+    7. Each question object must include a 'difficulty' field with one of these values: "Easy", "Medium", or "Hard".
        - For each skill, include a balanced mix: roughly 2 Easy, 2-3 Medium, and 1-2 Hard questions.
        - Easy: basic concepts and definitions
        - Medium: applied knowledge and common patterns
