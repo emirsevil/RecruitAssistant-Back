@@ -7,6 +7,9 @@ from schemas.workspace import (
     WorkspaceUpdate,
     WorkspaceResponse,
 )
+from schemas import quiz as quiz_schema
+from crud import quiz as quiz_crud
+from services.quiz_generator import generate_quizzes_from_job_description
 from crud.workspace import (
     create_workspace,
     get_workspace,
@@ -61,3 +64,58 @@ def remove_workspace(workspace_id: int, db: Session = Depends(get_db)):
     deleted = delete_workspace(db, workspace_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    return None
+
+@router.post("/{workspace_id}/quizzes/generate", response_model=list[quiz_schema.QuizGroupResponse])
+def generate_quizzes_for_workspace(workspace_id: int, db: Session = Depends(get_db)):
+    # Retrieve workspace to get job description
+    workspace = get_workspace(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    job_desc = workspace.job_description or ""
+    generated = generate_quizzes_from_job_description(job_desc)
+    
+    # Use a dictionary to group by (title, difficulty)
+    grouped_data = {}
+    
+    for q in generated:
+        title = q.get("title", "Technical Quiz")
+        diff = q.get("difficulty", "Medium")
+        
+        quiz_data = quiz_schema.QuizCreate(
+            workspace_id=workspace_id,
+            title=title,
+            difficulty=diff,
+            question=q.get("question", ""),
+            options=q.get("options", []),
+            correct_answer=q.get("correct_answer", "")
+        )
+        created = quiz_crud.create_quiz(db, quiz=quiz_data)
+        
+        key = (title, diff)
+        if key not in grouped_data:
+            grouped_data[key] = []
+        grouped_data[key].append(created)
+        
+    return [
+        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
+        for (title, diff), questions in grouped_data.items()
+    ]
+@router.get("/{workspace_id}/quizzes", response_model=list[quiz_schema.QuizGroupResponse])
+def get_workspace_quizzes(workspace_id: int, db: Session = Depends(get_db)):
+    """Workspace'e ait mevcut quizleri başlıklarına göre gruplayarak getir."""
+    quizzes = quiz_crud.list_quizzes(db, workspace_id=workspace_id)
+    
+    grouped_data = {}
+    for q in quizzes:
+        title = q.title or "Technical Quiz"
+        diff = q.difficulty or "Medium"
+        key = (title, diff)
+        if key not in grouped_data:
+            grouped_data[key] = []
+        grouped_data[key].append(q)
+        
+    return [
+        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
+        for (title, diff), questions in grouped_data.items()
+    ]
