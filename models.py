@@ -86,10 +86,18 @@ class Interview(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"))
-    interview_type = Column(String, nullable=False) # "Technical" veya "HR"
-    feedback = Column(Text, nullable=True)
-    transcript = Column(Text, nullable=True)
+    interview_type = Column(String, nullable=False)  # "technical" or "hr"
+    feedback = Column(Text, nullable=True)            # JSON: evaluation results
+    transcript = Column(Text, nullable=True)          # JSON: questions list or conversation
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # New metadata columns
+    difficulty = Column(String, nullable=True)         # "intern", "junior", "mid"
+    categories = Column(String, nullable=True)         # Topics/categories used
+    overall_score = Column(Integer, nullable=True)     # 0-100 overall score
+    duration_seconds = Column(Integer, nullable=True)  # Interview duration in seconds
+    status = Column(String, nullable=False, default="in_progress")  # "in_progress", "completed", "cancelled"
+    mode = Column(String, nullable=False, default="text")            # "text" or "voice"
 
     # İlişkiler
     workspace = relationship("Workspace", back_populates="interviews")

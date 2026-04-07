@@ -11,5 +11,7 @@ venv/
 env/
 .venv/
 
+mock_data.sql
+
 # --- Mac/Windows Çöpleri ---
 .DS_Store
