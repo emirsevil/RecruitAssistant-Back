@@ -14,8 +14,8 @@ from routers.voice_interview import router as voice_interview_router
 # Run database migrations on startup so schema is always up-to-date.
 # This handles both new databases (creates all tables) and existing ones
 # (applies any pending column/table changes via Alembic migrations).
-_alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-command.upgrade(_alembic_cfg, "head")
+# _alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+# command.upgrade(_alembic_cfg, "head")
 
 app = FastAPI()
 
