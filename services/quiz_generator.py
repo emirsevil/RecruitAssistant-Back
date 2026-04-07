@@ -23,28 +23,44 @@ def generate_quizzes_from_job_description(job_desc: str) -> List[Dict]:
     client = OpenAI(api_key=api_key)
     # Prompt for the LLM
     prompt = f"""You are an expert Technical IT Interviewer. 
-    Task: Analyze the provided Job Description and identify ALL distinct core technical skills, programming languages, or frameworks mentioned (e.g., Python, SQL, React, AWS, Docker). 
+    Task: Analyze the provided Job Description and extract ALL distinct core technical skills, programming languages, or frameworks mentioned (e.g., Python, SQL, React, AWS, Docker). 
     
-    Requirements for EACH identified skill:
-    1. Generate a SEPARATE set of 5 to 7 technical questions.
-    2. Questions must be deep and technical (testing actual knowledge, not just definitions).
+    Requirements:
+    1. For EACH identified skill, you MUST generate exactly 3 separate quizzes based on difficulty: "Easy", "Medium", and "Hard".
+    2. Each quiz MUST contain between 5 and 9 deep, technical questions.
     3. Provide exactly four options for each question as a JSON list of strings.
     4. Specify the 'correct_answer' which must match one of the options exactly.
-    5. Each question object must include a 'title' field containing the name of the skill (e.g., "Python", "SQL").
-    6. MANDATORY: Each question must be UNIQUE. Do not repeat the same question or concept twice for the same skill.
-    7. Each question object must include a 'difficulty' field with one of these values: "Easy", "Medium", or "Hard".
-       - For each skill, include a balanced mix: roughly 2 Easy, 2-3 Medium, and 1-2 Hard questions.
-       - Easy: basic concepts and definitions
-       - Medium: applied knowledge and common patterns
-       - Hard: advanced edge cases, internals, and optimization
+    5. MANDATORY: Every question must be UNIQUE. Do not repeat questions or concepts.
+    6. Difficulty criteria:
+       - Easy: Basic concepts, syntax, and definitions.
+       - Medium: Applied knowledge, common patterns, and architecture.
+       - Hard: Advanced edge cases, internals, and optimization.
 
-    Output ONLY a valid JSON array containing all questions for all skills. 
-    Format:
+    Output ONLY a valid JSON array of Quiz objects. Do not include markdown formatting like ```json. Use this exact schema:
     [
-      {{"title": "SkillName1", "difficulty": "Easy", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
-      {{"title": "SkillName1", "difficulty": "Medium", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
-      {{"title": "SkillName1", "difficulty": "Hard", "question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "..."}},
-      ... (5-7 questions per skill with mixed difficulties)
+      {{
+        "title": "SkillName",
+        "difficulty": "Easy",
+        "questions": [
+          {{
+            "question": "...",
+            "options": ["...", "...", "...", "..."],
+            "correct_answer": "..."
+          }}
+          // Add 5 to 9 questions here
+        ]
+      }},
+      {{
+        "title": "SkillName",
+        "difficulty": "Medium",
+        "questions": [ ... ] // Add 5 to 9 questions here
+      }},
+      {{
+        "title": "SkillName",
+        "difficulty": "Hard",
+        "questions": [ ... ] // Add 5 to 9 questions here
+      }}
+      // Repeat these 3 quiz objects (Easy, Medium, Hard) for EVERY skill found in the job description.
     ]
 
     Job Description:
