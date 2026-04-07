@@ -23,7 +23,6 @@ router = APIRouter(prefix="/interviews", tags=["Interviews"])
 def get_interviews(workspace_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
     """List all interviews, optionally filtered by workspace_id."""
     interviews = list_interviews(db, workspace_id=workspace_id)
-    print("interviews", interviews)
     results = []
     for iv in interviews:
         company_name = None
@@ -213,8 +212,6 @@ def evaluate_mock_interview(request: EvaluateRequest, db: Session = Depends(get_
         if not ans:
             qa_dict["answer"] = "(Passed / No Answer)"
         qa_dicts.append(qa_dict)
-
-    print("Evaluator QA Dicts:", qa_dicts)
 
     # Single batch OpenAI call
     evaluation = evaluate_interview(
