@@ -5,6 +5,7 @@ from typing import Optional
 
 class CoverLetterBase(BaseModel):
     content: str
+    latex_content: Optional[str] = None
 
 
 class CoverLetterCreate(CoverLetterBase):
@@ -13,6 +14,7 @@ class CoverLetterCreate(CoverLetterBase):
 
 class CoverLetterUpdate(BaseModel):
     content: Optional[str] = None
+    latex_content: Optional[str] = None
 
 
 class CoverLetterResponse(CoverLetterBase):
