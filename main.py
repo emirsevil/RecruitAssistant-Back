@@ -1,15 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import models
-from database import engine
+from alembic.config import Config
+from alembic import command
+import os
+
 from routers.workspace import router as workspace_router
 from routers.interview import router as interview_router
 from routers.voice_interview import router as voice_interview_router
 
-# --- KRİTİK NOKTA ---
-# Bu kod çalışınca SQLAlchemy gider, models.py'ye bakar
-# ve veritabanında 'users' tablosu yoksa OLUŞTURUR.
-models.Base.metadata.create_all(bind=engine)
+# Run database migrations on startup so schema is always up-to-date.
+# This handles both new databases (creates all tables) and existing ones
+# (applies any pending column/table changes via Alembic migrations).
+_alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+command.upgrade(_alembic_cfg, "head")
 
 app = FastAPI()
 
