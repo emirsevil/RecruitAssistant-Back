@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -16,6 +16,7 @@ class User(Base):
     # İlişkiler
     cvs = relationship("CV", back_populates="owner")
     workspaces = relationship("Workspace", back_populates="owner")
+    quiz_scores = relationship("QuizScore", back_populates="user")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -48,6 +49,7 @@ class Workspace(Base):
     quizzes = relationship("Quiz", back_populates="workspace")
     interviews = relationship("Interview", back_populates="workspace")
     cover_letters = relationship("CoverLetter", back_populates="workspace")
+    quiz_scores = relationship("QuizScore", back_populates="workspace")
 
 # 4. COVER LETTER (Niyet Mektupları Tablosu) - YENİ EKLENDİ
 class CoverLetter(Base):
@@ -67,11 +69,17 @@ class Quiz(Base):
     __tablename__ = "quizzes"
 
     id = Column(Integer, primary_key=True, index=True)
-    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True)
-    score = Column(Integer, nullable=True)
+    # Genel quizler için null kalabilir, o yüzden nullable=True yapıyoruz
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True) 
+    title = Column(String, nullable=True) # Konu başlığı (Örn: SQL, Java)
+    difficulty = Column(String, nullable=True) # Zorluk seviyesi: Easy, Medium, Hard
+    
+    question = Column(String, nullable=False)
+    # Şıkları ["A", "B", "C", "D"] şeklinde liste olarak tutmak için JSON kullanıyoruz
+    options = Column(JSON, nullable=False)  
+    correct_answer = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # İlişkiler
     workspace = relationship("Workspace", back_populates="quizzes")
 
 # 6. INTERVIEW (Mülakatlar Tablosu)
@@ -80,10 +88,36 @@ class Interview(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"))
-    interview_type = Column(String, nullable=False) # "Technical" veya "HR"
-    feedback = Column(Text, nullable=True)
-    transcript = Column(Text, nullable=True)
+    interview_type = Column(String, nullable=False)  # "technical" or "hr"
+    feedback = Column(Text, nullable=True)            # JSON: evaluation results
+    transcript = Column(Text, nullable=True)          # JSON: questions list or conversation
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # New metadata columns
+    difficulty = Column(String, nullable=True)         # "intern", "junior", "mid"
+    categories = Column(String, nullable=True)         # Topics/categories used
+    overall_score = Column(Integer, nullable=True)     # 0-100 overall score
+    duration_seconds = Column(Integer, nullable=True)  # Interview duration in seconds
+    status = Column(String, nullable=False, default="in_progress")  # "in_progress", "completed", "cancelled"
+    mode = Column(String, nullable=False, default="text")            # "text" or "voice"
 
     # İlişkiler
     workspace = relationship("Workspace", back_populates="interviews")
+
+# 7. QUIZ SCORE (Quiz Sonuçları Tablosu)
+class QuizScore(Base):
+    __tablename__ = "quiz_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
+    quiz_title = Column(String, nullable=False)  # Skill/konu adı (Örn: "Python", "SQL")
+    difficulty = Column(String, nullable=False)  # Zorluk seviyesi (Örn: "Easy", "Medium", "Hard")
+    score = Column(Integer, nullable=False)  # Yüzdelik skor (0-100)
+    total_questions = Column(Integer, nullable=False)
+    correct_answers = Column(Integer, nullable=False)
+    completed_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # İlişkiler
+    user = relationship("User", back_populates="quiz_scores")
+    workspace = relationship("Workspace", back_populates="quiz_scores")
