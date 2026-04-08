@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from models import Workspace
 from schemas.workspace import WorkspaceCreate, WorkspaceUpdate
+from typing import Optional
 
 
 # ---------- CREATE ----------
@@ -17,7 +18,7 @@ def create_workspace(db: Session, workspace: WorkspaceCreate) -> Workspace:
 
 
 # ---------- READ (tek) ----------
-def get_workspace(db: Session, workspace_id: int) -> Workspace | None:
+def get_workspace(db: Session, workspace_id: int) -> Optional[Workspace]:
     return db.query(Workspace).filter(Workspace.id == workspace_id).first()
 
 
@@ -34,7 +35,7 @@ def get_workspaces_by_user(db: Session, user_id: int) -> list[Workspace]:
 # ---------- UPDATE ----------
 def update_workspace(
     db: Session, workspace_id: int, updates: WorkspaceUpdate
-) -> Workspace | None:
+) -> Optional[Workspace]:
     db_workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
     if not db_workspace:
         return None
