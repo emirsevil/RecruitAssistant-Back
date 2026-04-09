@@ -91,7 +91,7 @@ def api_compile_latex(
         if not workspace:
             raise HTTPException(status_code=404, detail="Workspace bulunamadı")
 
-    # Step 1: Compile the provided LaTeX to PDF via pdflatex
+    # Step 1: Compile the provided LaTeX to PDF via Tectonic
     pdf_base64 = compile_latex_to_pdf(request.latex_content)
 
     # Step 2: Persist to DB if a workspace is configured

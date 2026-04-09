@@ -144,20 +144,19 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
 
 
 # ══════════════════════════════════════════════
-#  LATEX → PDF COMPILATION
+#  LATEX → PDF COMPILATION (TECTONIC)
 # ══════════════════════════════════════════════
 
-def _find_pdflatex() -> Optional[str]:
-    """Locate the pdflatex binary. Checks common install paths on macOS."""
-    path = shutil.which("pdflatex")
+def _find_tectonic() -> Optional[str]:
+    """Locate the tectonic binary. Checks common install paths on macOS."""
+    path = shutil.which("tectonic")
     if path:
         return path
+    
+    # Common Homebrew paths on Intel and Apple Silicon
     common_paths = [
-        "/Library/TeX/texbin/pdflatex",
-        "/usr/texbin/pdflatex",
-        "/usr/local/texlive/2024/bin/universal-darwin/pdflatex",
-        "/usr/local/texlive/2025/bin/universal-darwin/pdflatex",
-        "/usr/local/texlive/2026/bin/universal-darwin/pdflatex",
+        "/usr/local/bin/tectonic",
+        "/opt/homebrew/bin/tectonic",
     ]
     for p in common_paths:
         if os.path.isfile(p):
@@ -167,17 +166,17 @@ def _find_pdflatex() -> Optional[str]:
 
 def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
     """
-    Compile a LaTeX string to PDF using pdflatex.
+    Compile a LaTeX string to PDF using Tectonic.
 
     Returns the PDF as a base64-encoded string, or None if compilation fails.
-    All temporary files (.tex, .aux, .log, .pdf) are cleaned up after use.
+    Tectonic automatically handles multiple passes and downloads missing packages.
     """
-    pdflatex_bin = _find_pdflatex()
-    if not pdflatex_bin:
+    tectonic_bin = _find_tectonic()
+    if not tectonic_bin:
         logger.warning(
-            "pdflatex not found on this system. "
-            "Install TeX Live (e.g. `brew install --cask mactex-no-gui`) "
-            "or use the provided Dockerfile for deployment."
+            "tectonic not found on this system. "
+            "Please install it via `brew install tectonic` (macOS) "
+            "or visit https://tectonic-typesetting.github.io/ for installation instructions."
         )
         return None
 
@@ -189,12 +188,9 @@ def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
     # Sanitize: Strip any markdown fences if present
     content = latex_content.strip()
     if content.startswith("```"):
-        # Find the end of the first line (e.g., ```latex)
         first_newline = content.find("\n")
         if first_newline != -1:
             content = content[first_newline:].strip()
-        
-        # Strip the trailing fences
         if content.endswith("```"):
             content = content[:-3].strip()
     
@@ -202,33 +198,37 @@ def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
         with open(tex_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        for pass_num in range(2):
-            result = subprocess.run(
-                [
-                    pdflatex_bin,
-                    "-interaction=nonstopmode",
-                    "-halt-on-error",
-                    "-output-directory", tmp_dir,
-                    tex_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                cwd=tmp_dir,
-            )
+        # Tectonic handles multiple passes automatically.
+        # -X compile is the modern interface, but we'll use a robust fallback.
+        result = subprocess.run(
+            [
+                tectonic_bin,
+                "-X", "compile",
+                tex_path,
+                "--outdir", tmp_dir,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120, # Tectonic might download packages on first run
+            cwd=tmp_dir,
+        )
 
-            if result.returncode != 0 and pass_num == 0:
-                logger.error(
-                    "pdflatex failed (pass %d):\nSTDOUT: %s\nSTDERR: %s",
-                    pass_num + 1,
-                    result.stdout[-2000:] if result.stdout else "",
-                    result.stderr[-2000:] if result.stderr else "",
-                )
-                return None
+        if result.returncode != 0:
+            logger.error(
+                "Tectonic compilation failed:\nSTDOUT: %s\nSTDERR: %s",
+                result.stdout[-2000:] if result.stdout else "",
+                result.stderr[-2000:] if result.stderr else "",
+            )
+            return None
 
         if not os.path.isfile(pdf_path):
             logger.error("PDF file was not generated at %s", pdf_path)
-            return None
+            # Try to find any PDF in the directory as fallback
+            generated_pdfs = [f for f in os.listdir(tmp_dir) if f.endswith(".pdf")]
+            if generated_pdfs:
+                pdf_path = os.path.join(tmp_dir, generated_pdfs[0])
+            else:
+                return None
 
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
@@ -236,7 +236,7 @@ def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
         return base64.b64encode(pdf_bytes).decode("utf-8")
 
     except subprocess.TimeoutExpired:
-        logger.error("pdflatex timed out after 60 seconds")
+        logger.error("Tectonic timed out after 120 seconds")
         return None
     except Exception as e:
         logger.error("LaTeX compilation error: %s", str(e))
