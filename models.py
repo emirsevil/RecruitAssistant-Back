@@ -39,6 +39,9 @@ class Workspace(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     company_name = Column(String, nullable=False)
+    job_name = Column(String, nullable=True) # Eklendi
+    emoji = Column(String, nullable=True) # Eklendi
+    color = Column(String, nullable=True) # Eklendi
     job_description = Column(Text, nullable=True)
     generated_cv_id = Column(Integer, ForeignKey("cvs.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -5,6 +5,9 @@ from typing import Optional
 
 class WorkspaceBase(BaseModel):
     company_name: str
+    job_name: Optional[str] = None # Eklendi
+    emoji: Optional[str] = None # Eklendi
+    color: Optional[str] = None # Eklendi
     job_description: Optional[str] = None
 
 

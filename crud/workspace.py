@@ -9,6 +9,9 @@ def create_workspace(db: Session, workspace: WorkspaceCreate) -> Workspace:
     db_workspace = Workspace(
         user_id=workspace.user_id,
         company_name=workspace.company_name,
+        job_name=workspace.job_name, # Eklendi
+        emoji=workspace.emoji, # Eklendi
+        color=workspace.color, # Eklendi
         job_description=workspace.job_description,
     )
     db.add(db_workspace)
