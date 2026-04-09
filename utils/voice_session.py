@@ -28,6 +28,10 @@ from utils.ai_evaluator import evaluate_interview
 load_dotenv()
 
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
+if not CARTESIA_API_KEY:
+    print("⚠️ [WARNING] CARTESIA_API_KEY is missing in .env file! TTS will not work.")
+else:
+    print(f"✅ [INFO] CARTESIA_API_KEY found (length: {len(CARTESIA_API_KEY)})")
 CARTESIA_STT_URL = "wss://api.cartesia.ai/stt/websocket"
 CARTESIA_TTS_URL = "wss://api.cartesia.ai/tts/websocket"
 CARTESIA_VERSION = "2025-04-16"
@@ -382,7 +386,9 @@ class VoiceInterviewSession:
                                 await self.send_json({"type": "ai_done_speaking"})
 
                     elif msg_type == "error":
-                        print(f"[TTS] Error: {data.get('error', '')}")
+                        err_msg = data.get('error', 'Unknown Cartesia error')
+                        print(f"[TTS] Cartesia API Error: {err_msg}")
+                        await self.send_json({"type": "error", "message": f"Ses üretim hatası (Cartesia): {err_msg}"})
 
                 except json.JSONDecodeError:
                     # Binary message (shouldn't happen with Cartesia TTS, but handle it)
