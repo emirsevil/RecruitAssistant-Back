@@ -8,6 +8,8 @@ import models
 from database import engine
 from routers import quiz
 from routers.workspace import router as workspace_router
+from routers.cover_letter import router as cover_letter_router
+from routers.generation import router as generation_router
 from routers.interview import router as interview_router
 from routers.voice_interview import router as voice_interview_router
 
@@ -17,12 +19,16 @@ from routers.voice_interview import router as voice_interview_router
 # _alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
 # command.upgrade(_alembic_cfg, "head")
 
-app = FastAPI()
+app = FastAPI(
+    title="RecruitAssistant API",
+    description="AI-powered recruitment platform with CV & Cover Letter generation",
+    version="1.0.0",
+)
 
-# CORS - Frontend'in backend'e erişmesine izin ver
+# CORS — allow frontend to call the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +37,8 @@ app.add_middleware(
 # Include routers
 app.include_router(quiz.router)
 app.include_router(workspace_router)
+app.include_router(cover_letter_router)
+app.include_router(generation_router)
 app.include_router(interview_router)
 app.include_router(voice_interview_router)
 

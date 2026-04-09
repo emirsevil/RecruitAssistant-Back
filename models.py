@@ -24,7 +24,8 @@ class CV(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    file_url = Column(String, nullable=False)
+    file_url = Column(String, nullable=True)  # URL for uploaded CVs
+    latex_content = Column(Text, nullable=True)  # LaTeX source for AI-generated CVs
     is_base_cv = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -56,7 +57,8 @@ class CoverLetter(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"))
-    content = Column(Text, nullable=False) # Yapay zekanın ürettiği mektubun metni
+    content = Column(Text, nullable=False)  # Yapay zekanın ürettiği mektubun metni
+    latex_content = Column(Text, nullable=True)  # LaTeX source for AI-generated cover letters
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler
