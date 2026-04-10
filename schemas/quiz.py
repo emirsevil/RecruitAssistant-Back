@@ -86,3 +86,10 @@ class QuizScoreResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SkillSelection(BaseModel):
+    title: str
+    difficulties: List[str]
+
+class TargetedQuizRequest(BaseModel):
+    selections: List[SkillSelection]
