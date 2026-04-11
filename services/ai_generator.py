@@ -46,64 +46,76 @@ Your task is to generate a world-class, single-page (extend to two pages ONLY if
 
 ### PHASE 2: CONTENT ENGINEERING
 1. **The Google XYZ Formula:** Every bullet point must follow: "Accomplished [X] as measured by [Y], by doing [Z]". 
-   - *Bad:* "Managed a team of developers."
-   - *Good:* "Led a cross-functional team of 5 developers to deliver a high-traffic e-commerce portal 2 weeks ahead of schedule, increasing conversion rates by 12%."
 2. **Action Verbs:** Use powerful verbs (e.g., Orchestrated, Spearheaded, Engineered, Optimized).
 3. **Truth Only:** Never add roles, dates, or skills not explicitly given in the JSON profile.
 
-### PHASE 3: LATEX ARCHITECTURE (PREMIUM & ATS-SAFE)
-1. **Font:** Use `\usepackage[scaled]{helvet}` and `\renewcommand\familydefault{\sfdefault}` for a clean, modern Sans-Serif look (Industry best for digital readability).
-2. **Geometry:** Use `\usepackage[left=1.25cm,right=1.25cm,top=1.25cm,bottom=1.25cm]{geometry}`.
-3. **No Decorative Elements:** Avoid graphics, icons, or complex tables. Use standard sections and horizontal rules (`\hrule`).
-4. **Skills Section:** Group skills logically (e.g., Languages, Frameworks, Tools) to pass keyword-parsers instantly.
-
-### STRICT OUTPUT RULES
-- NO MARKDOWN: Do NOT wrap in ```latex ... ``` blocks or add conversational text. Start exactly with `\documentclass` and end with `\end{document}`.
-- IF YOU START WITH ```latex OR ANY MARKDOWN, YOU HAVE FAILED. 
-- NO HALLUCINATIONS: If the candidate didn't provide a PhD, they don't have one.
+- Preamble: Strictly start EXACTLY with:
+  \documentclass[11pt,a4paper]{article}
+  \usepackage{fontspec}
+  \setmainfont{texgyreheros-regular.otf}[
+    BoldFont=texgyreheros-bold.otf,
+    ItalicFont=texgyreheros-italic.otf,
+    BoldItalicFont=texgyreheros-bolditalic.otf
+  ]
+  \usepackage[english, turkish]{babel}
+  \usepackage[margin=1.25cm]{geometry}
+- Contact Info: Do NOT use custom commands like `\email{}`. Use standard text.
 - ESCAPE CHARACTERS: Ensure `# $ % & _ { } ~ ^ \` are escaped.
-- Return ONLY raw LaTeX source. No conversational preamble. No preamble text of any kind. Just the source code.
+- ABSOLUTE PRIORITY: USER'S CUSTOM INSTRUCTIONS take precedence.
+- NO HALLUCINATIONS: If the candidate didn't provide a PhD, they don't have one.
+- Return ONLY raw LaTeX source. No conversational preamble. No preamble text.
 """
-
 
 COVER_LETTER_SYSTEM_PROMPT = r"""You are a High-Stakes Career Coach and Persuasive Writer. 
 Your task is to write a compelling, tailored Cover Letter in LaTeX that bridge the gap between the Candidate's profile and the Employer's needs.
 
 ### STRATEGY: THE AIDA MODEL
-1. **Attention (The Hook):** Open with a strong, personalized statement about why the candidate is excited about this specific company and role. Use cues from the Job Description.
-2. **Interest (Proof of Value):** Select 1-2 key achievements from the candidate's profile that directly map to the "Required Qualifications" in the JD.
-3. **Desire (The Why):** Explain why the candidate is the solution to the company's specific pain points (e.g., scaling, optimization, leadership).
+1. **Attention (The Hook):** Open with a strong, personalized statement about why the candidate is excited about this specific company and role.
+2. **Interest (Proof of Value):** Select 1-2 key achievements from the candidate's profile that directly map to the "Required Qualifications".
+3. **Desire (The Why):** Explain why the candidate is the solution to the company's specific pain points.
 4. **Action (The Close):** A professional call to action, expressing readiness for an interview.
 
-### LATEX FORMATTING (PREMIUM)
-- Document Class: `\documentclass[11pt,a4paper]{article}`.
-- Spacing: Use `\usepackage{parskip}` for modern paragraph spacing.
-- Header: Match the professional header style of the CV (Name, Email, LinkedIn, etc. clearly positioned).
-- Font: Use the same clean Sans-Serif font as the CV for brand consistency (`helvet`).
-- Geometry: `\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}` for a balanced letter layout.
+### LATEX ARCHITECTURE (PREMIUM)
+1. **Document Class:** `\documentclass[11pt,a4paper]{article}`.
+2. **Preamble:** 
+   \usepackage{fontspec}
+   \setmainfont{texgyreheros-regular.otf}[
+     BoldFont=texgyreheros-bold.otf,
+     ItalicFont=texgyreheros-italic.otf,
+     BoldItalicFont=texgyreheros-bolditalic.otf
+   ]
+   \usepackage[english, turkish]{babel}
+   \usepackage{parskip}
+3. **Geometry:** `\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}`.
+6. **Header:** Match the professional header style of the CV (Name, Email, etc.).
+7. **Structure:** Include [Date], [Recipient/Company Info], [Salutation], [Body Paragraphs], [Professional Closing], and [Candidate Name].
 
 ### STRICT OUTPUT RULES
-- NO MARKDOWN: Do NOT wrap in ```latex ... ``` blocks or add conversational text. No backticks. Start exactly with `\documentclass` and end with `\end{document}`.
-- NO CONVIVIAL FILLER: Do not say "Certainly, here is your letter."
-- Return ONLY the final LaTeX source code. No conversational filler or markdown fences.
+- NO MARKDOWN: Start exactly with `\documentclass` and end with `\end{document}`. No backticks.
+- BRACKET SAFETY: NEVER use `\\` followed immediately by a bracket `[` on the next line (e.g., `\\ \n [Date]`). This causes compilation errors. Use `\\[0pt]` or simply start a new paragraph.
+- ESCAPE CHARACTERS: Ensure `# $ % & _ { } ~ ^ \` are escaped.
+- Return ONLY the final LaTeX source code. No conversational preamble.
 """
-
 
 # ══════════════════════════════════════════════
 #  LLM GENERATION (STREAMING)
 # ══════════════════════════════════════════════
 
-def _build_user_message(candidate_profile: dict, job_description: str) -> str:
+def _build_user_message(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, prioritize: bool = False) -> str:
     """Format the user data into a structured prompt for the LLM."""
-    return (
-        "=== CANDIDATE PROFILE (JSON) ===\n"
-        f"{json.dumps(candidate_profile, indent=2, ensure_ascii=False)}\n\n"
-        "=== JOB DESCRIPTION ===\n"
-        f"{job_description}"
-    )
+    parts = []
+    
+    if special_instructions:
+        header = "=== ABSOLUTE PRIORITY: USER'S CUSTOM INSTRUCTIONS ===" if prioritize else "=== USER'S CUSTOM INSTRUCTIONS ==="
+        parts.append(f"{header}\n{special_instructions}")
+    
+    parts.append("=== CANDIDATE PROFILE (JSON) ===\n" + json.dumps(candidate_profile, indent=2, ensure_ascii=False))
+    parts.append(f"=== JOB DESCRIPTION ===\n{job_description}")
+    
+    return "\n\n".join(parts)
 
 
-def generate_cv_latex_stream(candidate_profile: dict, job_description: str) -> Generator[str, None, None]:
+def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
     """Stream OpenAI generated CV LaTeX using a generator."""
     logger.info("Streaming CV LaTeX via OpenAI (%s)", MODEL)
 
@@ -112,7 +124,7 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str) -> G
         temperature=0.3,
         messages=[
             {"role": "system", "content": CV_SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_message(candidate_profile, job_description)},
+            {"role": "user", "content": _build_user_message(candidate_profile, job_description, special_instructions, prioritize=True)},
         ],
         stream=True,
     )
@@ -123,7 +135,7 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str) -> G
             yield delta
 
 
-def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str) -> Generator[str, None, None]:
+def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
     """Stream OpenAI generated Cover Letter LaTeX using a generator."""
     logger.info("Streaming Cover Letter LaTeX via OpenAI (%s)", MODEL)
 
@@ -132,7 +144,7 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
         temperature=0.5,
         messages=[
             {"role": "system", "content": COVER_LETTER_SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_message(candidate_profile, job_description)},
+            {"role": "user", "content": _build_user_message(candidate_profile, job_description, special_instructions)},
         ],
         stream=True,
     )
@@ -149,11 +161,7 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
 
 def _find_tectonic() -> Optional[str]:
     """Locate the tectonic binary. Checks common install paths on macOS."""
-    path = shutil.which("tectonic")
-    if path:
-        return path
-    
-    # Common Homebrew paths on Intel and Apple Silicon
+    # Check absolute paths first for reliability
     common_paths = [
         "/usr/local/bin/tectonic",
         "/opt/homebrew/bin/tectonic",
@@ -161,7 +169,9 @@ def _find_tectonic() -> Optional[str]:
     for p in common_paths:
         if os.path.isfile(p):
             return p
-    return None
+            
+    # Fallback to PATH
+    return shutil.which("tectonic")
 
 
 def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
@@ -185,14 +195,41 @@ def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
     tex_path = os.path.join(tmp_dir, tex_filename)
     pdf_path = tex_path.replace(".tex", ".pdf")
 
-    # Sanitize: Strip any markdown fences if present
-    content = latex_content.strip()
-    if content.startswith("```"):
-        first_newline = content.find("\n")
-        if first_newline != -1:
-            content = content[first_newline:].strip()
-        if content.endswith("```"):
-            content = content[:-3].strip()
+    # Robust Extraction: Use regex to capture strictly between \documentclass and \end{document}
+    import re
+    match = re.search(r"(\\documentclass.*\\end\{document\})", latex_content, re.DOTALL)
+    if match:
+        content = match.group(1).strip()
+    else:
+        # Fallback to stripping markdown fences if regex fails
+        content = latex_content.strip()
+        if content.startswith("```"):
+            first_newline = content.find("\n")
+            if first_newline != -1:
+                content = content[first_newline:].strip()
+            if content.endswith("```"):
+                content = content[:-3].strip()
+
+    # Character Scrubber: Escape problematic characters that often fail compilation
+    # 1. Escape basic characters if not already escaped
+    content = re.sub(r"(?<!\\)_", r"\_", content)
+    content = re.sub(r"(?<!\\)&", r"\&", content)
+    content = re.sub(r"(?<!\\)%", r"\%", content)
+    
+    # 2. Strip common hallucinated commands that cause "Undefined control sequence"
+    content = re.sub(r"\\email\{", r" ", content)
+    content = re.sub(r"\\phone\{", r" ", content)
+    content = re.sub(r"\\linkedin\{", r" ", content)
+    content = re.sub(r"\\location\{", r" ", content)
+    content = re.sub(r"\\github\{", r" ", content)
+    content = re.sub(r"\\address\{", r" ", content)
+    
+    # 3. Fix potential "Missing number" issues in common spacing commands
+    content = re.sub(r"\\vspace\{[a-zA-Z\s]+\}", r"\\vspace{1em}", content)
+    
+    # 4. FIX: Brackets after \\ are misinterpreted as spacing arguments
+    # (e.g. \\ \n [Date] -> LaTeX thinks [Date] is a dimension)
+    content = re.sub(r"\\\\\s*\n\s*\[", r"\\\\[0pt]\n[", content)
     
     try:
         with open(tex_path, "w", encoding="utf-8") as f:
@@ -219,6 +256,14 @@ def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
                 result.stdout[-2000:] if result.stdout else "",
                 result.stderr[-2000:] if result.stderr else "",
             )
+            # Log the content that failed for debugging
+            fail_log_path = os.path.join(os.getcwd(), "last_failed_latex.tex")
+            try:
+                with open(fail_log_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                logger.info("Saved failing LaTeX to %s", fail_log_path)
+            except:
+                pass
             return None
 
         if not os.path.isfile(pdf_path):
