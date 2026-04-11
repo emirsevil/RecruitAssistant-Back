@@ -14,6 +14,9 @@ from crud.cover_letter import (
     update_cover_letter,
     delete_cover_letter,
 )
+from routers.auth import get_current_user
+import models
+from crud.workspace import get_workspace
 
 router = APIRouter(prefix="/cover-letters", tags=["Cover Letters"])
 
@@ -22,7 +25,13 @@ router = APIRouter(prefix="/cover-letters", tags=["Cover Letters"])
 def create_new_cover_letter(
     cover_letter: CoverLetterCreate,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
+    """Create a new cover letter if the user owns the workspace."""
+    workspace = get_workspace(db, cover_letter.workspace_id)
+    if not workspace or workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+        
     return create_cover_letter(db, cover_letter)
 
 # GET  /cover-letters/{cover_letter_id}
@@ -35,7 +44,16 @@ def read_cover_letter(cover_letter_id: int, db: Session = Depends(get_db)):
 
 # GET  /cover-letters/workspace/{workspace_id}
 @router.get("/workspace/{workspace_id}", response_model=list[CoverLetterResponse])
-def read_workspace_cover_letters(workspace_id: int, db: Session = Depends(get_db)):
+def read_workspace_cover_letters(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Fetch cover letters for an owned workspace."""
+    workspace = get_workspace(db, workspace_id)
+    if not workspace or workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+        
     return get_cover_letters_by_workspace(db, workspace_id)
 
 # PUT  /cover-letters/{cover_letter_id}

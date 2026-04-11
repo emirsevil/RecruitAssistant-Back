@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -21,6 +21,8 @@ from crud.workspace import (
     update_workspace,
     delete_workspace,
 )
+from routers.auth import get_current_user
+import models
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
@@ -30,23 +32,43 @@ router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 def create_new_workspace(
     workspace: WorkspaceCreate,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
-    return create_workspace(db, workspace)
+    """Create a new workspace for the authenticated user."""
+    # Ensure user_id in the creation logic matches the current user
+    workspace_data = workspace.model_dump()
+    workspace_data["user_id"] = current_user.id
+    
+    # We might need a slightly different create_workspace call if the schema allows passing user_id
+    from schemas.workspace import WorkspaceCreate
+    updated_workspace = WorkspaceCreate(**workspace_data)
+    return create_workspace(db, updated_workspace)
+
+
+# GET  /workspaces/
+@router.get("/", response_model=list[WorkspaceResponse])
+def read_user_workspaces(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Fetch all workspaces belonging to the authenticated user."""
+    return get_workspaces_by_user(db, current_user.id)
 
 
 # GET  /workspaces/{workspace_id}
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)
-def read_workspace(workspace_id: int, db: Session = Depends(get_db)):
+def read_workspace(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Fetch a specific workspace only if it belongs to the authenticated user."""
     db_workspace = get_workspace(db, workspace_id)
     if not db_workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if db_workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
     return db_workspace
-
-
-# GET  /workspaces/user/{user_id}
-@router.get("/user/{user_id}", response_model=list[WorkspaceResponse])
-def read_user_workspaces(user_id: int, db: Session = Depends(get_db)):
-    return get_workspaces_by_user(db, user_id)
 
 
 # PUT  /workspaces/{workspace_id}
@@ -55,27 +77,49 @@ def update_existing_workspace(
     workspace_id: int,
     updates: WorkspaceUpdate,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
-    db_workspace = update_workspace(db, workspace_id, updates)
+    """Update a workspace only if it belongs to the authenticated user."""
+    db_workspace = get_workspace(db, workspace_id)
     if not db_workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
-    return db_workspace
+    if db_workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+    
+    return update_workspace(db, workspace_id, updates)
 
 
 # DELETE  /workspaces/{workspace_id}
 @router.delete("/{workspace_id}", status_code=204)
-def remove_workspace(workspace_id: int, db: Session = Depends(get_db)):
-    deleted = delete_workspace(db, workspace_id)
-    if not deleted:
+def remove_workspace(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Delete a workspace only if it belongs to the authenticated user."""
+    db_workspace = get_workspace(db, workspace_id)
+    if not db_workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if db_workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+        
+    delete_workspace(db, workspace_id)
     return None
 
 @router.post("/{workspace_id}/quizzes/generate", response_model=list[quiz_schema.QuizGroupResponse])
-def generate_quizzes_for_workspace(workspace_id: int, db: Session = Depends(get_db)):
+def generate_quizzes_for_workspace(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Generate quizzes for a workspace owned by the authenticated user."""
     # Retrieve workspace to get job description
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+        
     job_desc = workspace.job_description or ""
     generated = generate_quizzes_from_job_description(job_desc)
     
@@ -105,31 +149,18 @@ def generate_quizzes_for_workspace(workspace_id: int, db: Session = Depends(get_
         quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
         for (title, diff), questions in grouped_data.items()
     ]
-@router.get("/{workspace_id}/quizzes", response_model=list[quiz_schema.QuizGroupResponse])
-def get_workspace_quizzes(workspace_id: int, db: Session = Depends(get_db)):
-    """Workspace'e ait mevcut quizleri başlıklarına göre gruplayarak getir."""
-    quizzes = quiz_crud.list_quizzes(db, workspace_id=workspace_id)
-    
-    grouped_data = {}
-    for q in quizzes:
-        title = q.title or "Technical Quiz"
-        diff = q.difficulty or "Medium"
-        key = (title, diff)
-        if key not in grouped_data:
-            grouped_data[key] = []
-        grouped_data[key].append(q)
-        
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
-
 @router.post("/{workspace_id}/skills/extract", response_model=list[str])
-def extract_workspace_skills(workspace_id: int, db: Session = Depends(get_db)):
-    """Analyze workspace JD and extract key technical skills."""
+def extract_workspace_skills(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Analyze workspace JD and extract key technical skills for an owned workspace."""
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
     
     job_desc = workspace.job_description or ""
     if not job_desc:
@@ -141,12 +172,15 @@ def extract_workspace_skills(workspace_id: int, db: Session = Depends(get_db)):
 def generate_targeted_workspace_quizzes(
     workspace_id: int, 
     request: quiz_schema.TargetedQuizRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
-    """Generate quizzes for specific skills and difficulties selected by the user."""
+    """Generate targeted quizzes for an owned workspace."""
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
     
     job_desc = workspace.job_description or ""
     selections = [s.model_dump() for s in request.selections]

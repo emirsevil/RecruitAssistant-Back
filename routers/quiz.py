@@ -9,6 +9,9 @@ router = APIRouter(
     tags=["Quizzes"]
 )
 
+from routers.auth import get_current_user
+import models
+
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -50,11 +53,21 @@ def delete_quiz(quiz_id: int, db: Session = Depends(get_db)):
 # --- Quiz Submit & Score Endpoints ---
 
 @router.post("/submit", response_model=schemas.QuizSubmitResponse)
-def submit_quiz(submission: schemas.QuizSubmit, db: Session = Depends(get_db)):
+def submit_quiz(
+    submission: schemas.QuizSubmit, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
     Kullanıcı quiz'i bitirdiğinde cevaplarını gönderir.
     Backend doğru cevapları DB'den kontrol eder, skoru hesaplar ve kaydeder.
     """
+    # Verify ownership of the workspace
+    from crud.workspace import get_workspace
+    workspace = get_workspace(db, submission.workspace_id)
+    if not workspace or workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
     results = []
     correct_count = 0
 
@@ -85,7 +98,7 @@ def submit_quiz(submission: schemas.QuizSubmit, db: Session = Depends(get_db)):
     # Skoru DB'ye kaydet
     db_score = crud.create_quiz_score(
         db=db,
-        user_id=submission.user_id,
+        user_id=current_user.id, # Use authenticated user ID
         workspace_id=submission.workspace_id,
         quiz_title=submission.quiz_title,
         difficulty=submission.difficulty,
@@ -103,13 +116,25 @@ def submit_quiz(submission: schemas.QuizSubmit, db: Session = Depends(get_db)):
         score_id=db_score.id,
     )
 
-@router.get("/scores/user/{user_id}", response_model=list[schemas.QuizScoreResponse])
-def get_user_scores(user_id: int, db: Session = Depends(get_db)):
-    """Bir kullanıcının tüm quiz skorlarını getir."""
-    return crud.get_scores_by_user(db=db, user_id=user_id)
+@router.get("/scores/me", response_model=list[schemas.QuizScoreResponse])
+def get_user_scores(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Fetching scores for the currently authenticated user."""
+    return crud.get_scores_by_user(db=db, user_id=current_user.id)
 
 @router.get("/scores/workspace/{workspace_id}", response_model=list[schemas.QuizScoreResponse])
-def get_workspace_scores(workspace_id: int, user_id: int | None = None, db: Session = Depends(get_db)):
-    """Bir workspace'e ait quiz skorlarını getir. Opsiyonel olarak user_id ile filtrele."""
-    return crud.get_scores_by_workspace(db=db, workspace_id=workspace_id, user_id=user_id)
+def get_workspace_scores(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Fetching scores for an owned workspace."""
+    from crud.workspace import get_workspace
+    workspace = get_workspace(db, workspace_id)
+    if not workspace or workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+        
+    return crud.get_scores_by_workspace(db=db, workspace_id=workspace_id, user_id=current_user.id)
 
