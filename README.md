@@ -3,8 +3,8 @@
 AI-powered recruitment platform backend built with FastAPI and PostgreSQL.
 
 # To run
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-   
 uvicorn main:app --reload
 
 # To update database
