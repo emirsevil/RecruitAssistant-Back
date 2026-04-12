@@ -12,7 +12,9 @@ from crud.workspace import get_workspace
 from crud.interview import create_interview, get_interview, update_interview_feedback, list_interviews, update_interview
 from utils.ai_interviewer import generate_interview_questions
 from utils.ai_evaluator import evaluate_interview
-from models import Interview
+from utils.ai_evaluator import evaluate_interview
+from models import Interview, User
+from routers.auth import get_current_user
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
@@ -20,9 +22,18 @@ router = APIRouter(prefix="/interviews", tags=["Interviews"])
 # ─── List / Detail ────────────────────────────────────────────────
 
 @router.get("/", response_model=list[InterviewSummary])
-def get_interviews(workspace_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
-    """List all interviews, optionally filtered by workspace_id."""
-    interviews = list_interviews(db, workspace_id=workspace_id)
+def get_interviews(
+    workspace_id: Optional[int] = Query(None), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all interviews, optionally filtered by an owned workspace_id."""
+    if workspace_id:
+        workspace = get_workspace(db, workspace_id)
+        if not workspace or workspace.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+            
+    interviews = list_interviews(db, user_id=current_user.id, workspace_id=workspace_id)
     results = []
     for iv in interviews:
         company_name = None
@@ -47,11 +58,18 @@ def get_interviews(workspace_id: Optional[int] = Query(None), db: Session = Depe
 
 
 @router.get("/{interview_id}", response_model=InterviewDetail)
-def get_interview_detail(interview_id: int, db: Session = Depends(get_db)):
-    """Get full details of a single interview."""
+def get_interview_detail(
+    interview_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get full details of a single interview if it belongs to an owned workspace."""
     iv = get_interview(db, interview_id)
     if not iv:
         raise HTTPException(status_code=404, detail="Interview not found")
+        
+    if iv.workspace and iv.workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu mülakata erişim yetkiniz yok")
 
     company_name = None
     if iv.workspace:
@@ -150,10 +168,17 @@ def get_interview_detail(interview_id: int, db: Session = Depends(get_db)):
 # ─── Generate & Evaluate ─────────────────────────────────────────
 
 @router.post("/generate", response_model=MockInterviewResponse)
-def generate_mock_interview(request: MockInterviewRequest, db: Session = Depends(get_db)):
+def generate_mock_interview(
+    request: MockInterviewRequest, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     workspace = get_workspace(db, request.workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
 
     if not workspace.job_description:
         raise HTTPException(status_code=400, detail="Workspace does not have a job description")

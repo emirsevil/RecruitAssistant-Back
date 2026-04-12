@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import Interview
+from models import Interview, Workspace
 
 
 def create_interview(
@@ -31,9 +31,9 @@ def get_interview(db: Session, interview_id: int):
     return db.query(Interview).filter(Interview.id == interview_id).first()
 
 
-def list_interviews(db: Session, workspace_id: int = None):
-    """List interviews, optionally filtered by workspace, ordered newest first."""
-    query = db.query(Interview)
+def list_interviews(db: Session, user_id: int, workspace_id: int = None):
+    """List interviews for a specific user, optionally filtered by workspace, ordered newest first."""
+    query = db.query(Interview).join(Workspace).filter(Workspace.user_id == user_id)
     if workspace_id:
         query = query.filter(Interview.workspace_id == workspace_id)
     return query.order_by(Interview.created_at.desc()).all()

@@ -49,7 +49,7 @@ class AnswerItem(BaseModel):
 
 class QuizSubmit(BaseModel):
     """Kullanıcı quiz'i bitirince bu body ile submit eder."""
-    user_id: int
+    user_id: Optional[int] = None
     workspace_id: int
     quiz_title: str       # Hangi skill/konu grubu (Örn: "Python")
     difficulty: str       # Hangi zorluk seviyesi (Örn: "Easy")
@@ -86,3 +86,10 @@ class QuizScoreResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SkillSelection(BaseModel):
+    title: str
+    difficulties: List[str]
+
+class TargetedQuizRequest(BaseModel):
+    selections: List[SkillSelection]

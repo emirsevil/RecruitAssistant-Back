@@ -62,6 +62,21 @@ def run_migration():
                     print(f"{col_name} already exists in workspaces.")
 
             print("Workspace migration complete! 🎉")
+            
+            # Check users columns
+            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='users'"))
+            cols = [row[0] for row in result]
+            print(f"users columns: {cols}")
+
+            if "hashed_password" not in cols:
+                print("Adding hashed_password to users...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN hashed_password TEXT"))
+                conn.commit()
+                print("Successfully added hashed_password to users.")
+            else:
+                print("hashed_password already exists in users.")
+
+            print("Final migration complete! 🚀")
     except Exception as e:
         print("Error during migration:", e)
 
