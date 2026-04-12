@@ -18,19 +18,13 @@ import subprocess
 import re
 from typing import Optional, Generator
 
-from openai import OpenAI
 from dotenv import load_dotenv
+
+from utils.ai_client import get_ai_client, get_model_name
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-# ──────────────────────────────────────────────
-# OpenAI client
-# ──────────────────────────────────────────────
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-MODEL = "gpt-4o"  # Best quality for complex LaTeX generation
 
 
 # ══════════════════════════════════════════════
@@ -215,11 +209,13 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
 
 
 def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
-    """Stream OpenAI generated CV LaTeX using a generator."""
-    logger.info("Streaming CV LaTeX via OpenAI (%s)", MODEL)
+    """Stream AI-generated CV LaTeX using a generator."""
+    client = get_ai_client()
+    model = get_model_name(tier="default")
+    logger.info("Streaming CV LaTeX via %s", model)
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         temperature=0.3,
         messages=[
             {"role": "system", "content": CV_SYSTEM_PROMPT},
@@ -235,8 +231,10 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str, spec
 
 
 def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
-    """Stream OpenAI generated Cover Letter LaTeX using a generator."""
-    logger.info("Streaming Cover Letter LaTeX via OpenAI (%s)", MODEL)
+    """Stream AI-generated Cover Letter LaTeX using a generator."""
+    client = get_ai_client()
+    model = get_model_name(tier="default")
+    logger.info("Streaming Cover Letter LaTeX via %s", model)
     company_name = _extract_company_name(job_description)
     company_instruction = (
         f"=== TARGET COMPANY NAME ===\n{company_name}\nUse this exact company name in the recipient header."
@@ -248,7 +246,7 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
     )
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         temperature=0.5,
         messages=[
             {"role": "system", "content": COVER_LETTER_SYSTEM_PROMPT},
