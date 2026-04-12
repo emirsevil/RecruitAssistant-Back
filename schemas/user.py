@@ -1,24 +1,29 @@
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
 from typing import Optional
+from datetime import datetime
 
-# 1. Ortak Özellikler (Hem veri eklerken hem okurken ortak olanlar)
 class UserBase(BaseModel):
-    full_name: str
-    email: EmailStr # EmailStr formatın gerçekten "x@y.com" olmasını zorunlu kılar
+    email: EmailStr
+    full_name: Optional[str] = None
     university: Optional[str] = None
 
-# 2. Veri Eklerken (Create) Kullanılacak Şema
-# React'ten bize kullanıcı kaydolurken gelecek verilerin şablonu.
-# İleride buraya 'password' alanı da ekleyeceğiz.
 class UserCreate(UserBase):
-    pass 
+    password: str
 
-# 3. Veri Okurken (Response/Read) Kullanılacak Şema
-# Veritabanından veriyi çekip React'e gönderirken bu şablonu kullanacağız.
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
 class UserResponse(UserBase):
     id: int
     created_at: datetime
 
-    # SQLAlchemy modelleriyle uyumlu çalışabilmesi için gereken ayar:
-    model_config = {"from_attributes": True}
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
