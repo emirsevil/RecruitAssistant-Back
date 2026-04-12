@@ -25,6 +25,7 @@ Kurallar:
 5. Her soru için en fazla 1-2 takip sorusu sor, sonra bir sonraki soruya geç.
 6. Aday cevap vermezse veya "(Pas geçildi)" derse, yorum yapmadan geç.
 7. Takip sorularında adayın cevabındaki eksik veya belirsiz noktaları sorgula.
+8. Her soruyu kesinlikle oku, diğer soruya geçeceksen geçiş cümlesi kullandıktan sonra diğer soruyu kesinlikle oku.
 
 Örnek geçiş cümleleri (kısa tut bunlarla sınırlı kalmak zorunda değilsin):
 - "Anladım. Peki şunu sormak istiyorum..."
