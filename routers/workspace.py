@@ -149,6 +149,39 @@ def generate_quizzes_for_workspace(
         quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
         for (title, diff), questions in grouped_data.items()
     ]
+
+
+@router.get("/{workspace_id}/quizzes", response_model=list[quiz_schema.QuizGroupResponse])
+def list_workspace_quizzes(
+    workspace_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Fetch all quizzes for a workspace owned by the authenticated user, grouped by topic."""
+    workspace = get_workspace(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+        
+    quizzes = quiz_crud.list_quizzes(db=db, workspace_id=workspace_id)
+    
+    # Group by title and difficulty
+    grouped_data = {}
+    for q in quizzes:
+        title = q.title or "Technical Quiz"
+        diff = q.difficulty or "Medium"
+        key = (title, diff)
+        if key not in grouped_data:
+            grouped_data[key] = []
+        grouped_data[key].append(q)
+        
+    return [
+        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
+        for (title, diff), questions in grouped_data.items()
+    ]
+
+
 @router.post("/{workspace_id}/skills/extract", response_model=list[str])
 def extract_workspace_skills(
     workspace_id: int, 
