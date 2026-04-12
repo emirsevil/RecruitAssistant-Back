@@ -2,12 +2,9 @@
 
 AI-powered recruitment platform backend built with FastAPI and PostgreSQL.
 
-# To run locally without Docker
+# To run
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-# Required locally for PDF generation
-brew install tectonic
-   
 uvicorn main:app --reload
 
 # To run/deploy with Docker

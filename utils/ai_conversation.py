@@ -1,17 +1,12 @@
 """
-GPT wrapper for live conversational interview pacing in Turkish.
+LLM wrapper for live conversational interview pacing in Turkish.
 
 Unlike ai_interviewer.py (generates questions upfront) and ai_evaluator.py (evaluates after),
-this module handles mid-interview dialogue — GPT decides whether to follow up, move on, or wrap up.
+this module handles mid-interview dialogue — the LLM decides whether to follow up, move on, or wrap up.
 """
 import json
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from utils.ai_client import get_ai_client, get_model_name
 
 INTERVIEWER_SYSTEM_PROMPT = """
 Sen deneyimli ve profesyonel bir mülakatçısın. Türkçe konuşuyorsun.
@@ -25,6 +20,7 @@ Kurallar:
 5. Her soru için en fazla 1-2 takip sorusu sor, sonra bir sonraki soruya geç.
 6. Aday cevap vermezse veya "(Pas geçildi)" derse, yorum yapmadan geç.
 7. Takip sorularında adayın cevabındaki eksik veya belirsiz noktaları sorgula.
+8. Her soruyu kesinlikle oku, diğer soruya geçeceksen geçiş cümlesi kullandıktan sonra diğer soruyu kesinlikle oku.
 
 Örnek geçiş cümleleri (kısa tut bunlarla sınırlı kalmak zorunda değilsin):
 - "Anladım. Peki şunu sormak istiyorum..."
@@ -97,8 +93,10 @@ def generate_turkish_questions(job_description: str, categories: str, difficulty
     )
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="fast")
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Mülakat sorularını üret."}
@@ -122,8 +120,10 @@ def generate_intro_text(job_description: str, difficulty: str, interview_type: s
     )
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="fast")
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Mülakata başla."}
@@ -172,8 +172,10 @@ Kalan soru sayısı: {len(remaining_questions)}
         messages.append({"role": role, "content": entry.get("text", "")})
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="fast")
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=messages,
             response_format={"type": "json_object"}
         )
