@@ -1,4 +1,4 @@
-FROM rust:1.85-bookworm AS tectonic-builder
+FROM rust:1.79-bookworm AS tectonic-builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -15,7 +15,7 @@ RUN apt-get update \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cargo install tectonic --version 0.15.0
+RUN cargo install tectonic --version 0.15.0 --locked
 
 FROM python:3.13-slim-bookworm
 
