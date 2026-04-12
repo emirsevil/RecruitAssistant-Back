@@ -155,7 +155,7 @@ def login(
             "email": user.email,
             "full_name": user.full_name,
             "id": user.id,
-            "university": user.university
+            "education": user.education
         }
     }
 
@@ -188,3 +188,18 @@ def get_ws_ticket(
 def read_users_me(current_user: schemas.UserResponse = Depends(get_current_user)):
     """API endpoint to get the current authenticated user details."""
     return current_user
+
+@router.patch("/profile", response_model=schemas.UserResponse)
+def update_profile(
+    user_update: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: schemas.UserResponse = Depends(get_current_user)
+):
+    """API endpoint to update the current user's profile information."""
+    updated_user = crud.update_user(db, current_user.id, user_update)
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return updated_user

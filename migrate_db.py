@@ -68,13 +68,35 @@ def run_migration():
             cols = [row[0] for row in result]
             print(f"users columns: {cols}")
 
-            if "hashed_password" not in cols:
-                print("Adding hashed_password to users...")
-                conn.execute(text("ALTER TABLE users ADD COLUMN hashed_password TEXT"))
+            # 1. Rename university to education if university exists
+            if "university" in cols and "education" not in cols:
+                print("Renaming university to education in users...")
+                conn.execute(text("ALTER TABLE users RENAME COLUMN university TO education"))
                 conn.commit()
-                print("Successfully added hashed_password to users.")
-            else:
-                print("hashed_password already exists in users.")
+                print("Successfully renamed university to education.")
+            
+            # 2. Add other missing columns
+            new_user_cols = {
+                "phone": "TEXT",
+                "address": "TEXT",
+                "bio": "TEXT",
+                "professional_title": "TEXT",
+                "education": "TEXT", # In case it didn't exist and wasn't renamed
+                "skills": "TEXT",
+                "profile_image": "TEXT",
+                "hashed_password": "TEXT"
+            }
+
+            for col_name, col_type in new_user_cols.items():
+                # Re-fetch columns after possible rename
+                res = conn.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='{col_name}'"))
+                if not res.fetchone():
+                    print(f"Adding {col_name} to users...")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                    print(f"Successfully added {col_name} to users.")
+                else:
+                    print(f"{col_name} already exists in users.")
 
             print("Final migration complete! 🚀")
     except Exception as e:

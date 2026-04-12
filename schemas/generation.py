@@ -93,6 +93,10 @@ class GenerateCVRequest(BaseModel):
         None,
         description="Custom instructions for AI generation",
     )
+    language: Optional[str] = Field(
+        "en",
+        description="Language for CV generation ('en' or 'tr')",
+    )
 
 
 class GenerateCoverLetterRequest(BaseModel):
@@ -108,6 +112,10 @@ class GenerateCoverLetterRequest(BaseModel):
     special_instructions: Optional[str] = Field(
         None,
         description="Custom instructions for AI generation",
+    )
+    language: Optional[str] = Field(
+        "en",
+        description="Language for cover letter generation ('en' or 'tr')",
     )
 
 

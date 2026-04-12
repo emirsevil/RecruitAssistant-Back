@@ -11,7 +11,13 @@ class User(Base):
     full_name = Column(String, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=True) # Will be made non-nullable after migration
-    university = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    address = Column(Text, nullable=True)
+    bio = Column(Text, nullable=True)
+    professional_title = Column(String, nullable=True)
+    education = Column(Text, nullable=True) # Replaces university with more detail
+    skills = Column(Text, nullable=True)
+    profile_image = Column(String, nullable=True) # URL for profile picture
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler

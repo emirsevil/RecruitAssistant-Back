@@ -93,3 +93,4 @@ class SkillSelection(BaseModel):
 
 class TargetedQuizRequest(BaseModel):
     selections: List[SkillSelection]
+    language: Optional[str] = "tr"

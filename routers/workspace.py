@@ -218,7 +218,7 @@ def generate_targeted_workspace_quizzes(
     job_desc = workspace.job_description or ""
     selections = [s.model_dump() for s in request.selections]
     
-    generated = generate_targeted_quizzes(job_desc, selections)
+    generated = generate_targeted_quizzes(job_desc, selections, language=request.language or "tr")
     
     grouped_data = {}
     

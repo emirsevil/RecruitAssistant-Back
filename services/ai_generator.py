@@ -214,15 +214,17 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
     return content
 
 
-def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
+def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, language: str = "en") -> Generator[str, None, None]:
     """Stream OpenAI generated CV LaTeX using a generator."""
-    logger.info("Streaming CV LaTeX via OpenAI (%s)", MODEL)
+    logger.info("Streaming CV LaTeX via OpenAI (%s) in language: %s", MODEL, language)
+    
+    lang_instruction = f"Output Language: {language.upper()}. Ensure all generated content (summary, experience descriptions, etc.) is strictly in {language.upper()}."
 
     response = client.chat.completions.create(
         model=MODEL,
         temperature=0.3,
         messages=[
-            {"role": "system", "content": CV_SYSTEM_PROMPT},
+            {"role": "system", "content": CV_SYSTEM_PROMPT + "\n\n" + lang_instruction},
             {"role": "user", "content": _build_user_message(candidate_profile, job_description, special_instructions, prioritize=True)},
         ],
         stream=True,
@@ -234,17 +236,20 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str, spec
             yield delta
 
 
-def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
+def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, language: str = "en") -> Generator[str, None, None]:
     """Stream OpenAI generated Cover Letter LaTeX using a generator."""
-    logger.info("Streaming Cover Letter LaTeX via OpenAI (%s)", MODEL)
+    logger.info("Streaming Cover Letter LaTeX via OpenAI (%s) in language: %s", MODEL, language)
     company_name = _extract_company_name(job_description)
     company_instruction = (
         f"=== TARGET COMPANY NAME ===\n{company_name}\nUse this exact company name in the recipient header."
         if company_name
         else "=== TARGET COMPANY NAME ===\nUNKNOWN\nOmit the company-name line in the recipient header. Never output Company Name."
     )
+    
+    lang_instruction = f"Output Language: {language.upper()}. Ensure the entire cover letter is written strictly in {language.upper()}."
+    
     cover_letter_instructions = "\n\n".join(
-        part for part in [company_instruction, special_instructions] if part
+        part for part in [company_instruction, lang_instruction, special_instructions] if part
     )
 
     response = client.chat.completions.create(

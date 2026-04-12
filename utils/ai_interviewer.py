@@ -11,6 +11,7 @@ def generate_interview_questions(job_description: str, categories: str, difficul
     system_prompt = f"""
 You are an expert technical and HR interviewer.
 Your task is to generate {difficulty} level {interview_type} mock interview questions.
+
 The candidate is interviewing for a role with the following description:
 {job_description}
 
@@ -26,15 +27,15 @@ Return ONLY a valid JSON object with a "questions" key containing an array of ob
 Example format:
 {{
   "questions": [
-    {{ "id": 1, "question": "Tell me about yourself.", "topic": "Introduction", "aiResponse": true }},
-    {{ "id": 2, "question": "How does React work?", "topic": "React", "aiResponse": false }}
+    {{ "id": 1, "question": "...", "topic": "...", "aiResponse": true }},
+    {{ "id": 2, "question": "...", "topic": "...", "aiResponse": false }}
   ]
 }}
     """
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Generate the interview questions."}

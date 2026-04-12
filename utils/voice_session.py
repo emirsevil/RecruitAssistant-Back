@@ -470,7 +470,6 @@ class VoiceInterviewSession:
                 qa_pairs=self.qa_pairs,
                 job_description=self.job_description,
                 difficulty=self.difficulty,
-                language="tr",
             ),
         )
 
