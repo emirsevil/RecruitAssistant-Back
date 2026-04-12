@@ -10,20 +10,25 @@ Handles:
 import json
 import os
 import time
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from openai import OpenAI
 
-from database import SessionLocal
+from database import SessionLocal, get_db
 from crud.workspace import get_workspace
 from crud.interview import create_interview, update_interview_feedback, update_interview
 from utils.voice_session import VoiceInterviewSession
+from routers.auth import get_current_user, get_current_user_ws
+import models
 
 router = APIRouter(tags=["Voice Interview"])
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @router.post("/voice-interview/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user)
+):
     """Transcribe uploaded audio file using OpenAI Whisper API."""
     try:
         # OpenAI requires a tuple of (filename, file_like_object, content_type)
@@ -81,18 +86,16 @@ async def _save_session_to_db(session, db, interview_id, session_start_time):
 
 
 @router.websocket("/ws/voice-interview")
-async def voice_interview_websocket(websocket: WebSocket):
+async def voice_interview_websocket(
+    websocket: WebSocket,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user_ws)
+):
     """
     WebSocket endpoint for real-time voice-dialogued mock interviews.
-
-    Protocol:
-    - Client sends JSON messages for control (start_session, interrupt, end_session)
-    - Client sends binary messages for microphone audio (PCM s16le 16kHz mono)
-    - Server sends JSON messages for status updates
-    - Server sends binary messages for TTS audio (PCM f32le 24kHz mono)
     """
     await websocket.accept()
-    print("[WS] Client connected")
+    print(f"[WS] Client {current_user.email} connected")
 
     session: VoiceInterviewSession | None = None
     db: Session | None = None
@@ -141,11 +144,17 @@ async def voice_interview_websocket(websocket: WebSocket):
                     difficulty = data.get("difficulty", "junior")
                     interview_type = data.get("interview_type", "hr")
 
-                    # Validate workspace
+                    # Validate workspace and ownership
                     db = get_db_session()
                     workspace = get_workspace(db, workspace_id)
                     if not workspace:
                         await send_json({"type": "error", "message": "Çalışma alanı bulunamadı"})
+                        db.close()
+                        db = None
+                        continue
+                    
+                    if workspace.user_id != current_user.id:
+                        await send_json({"type": "error", "message": "Bu workspace'e erişim yetkiniz yok"})
                         db.close()
                         db = None
                         continue

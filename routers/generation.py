@@ -25,6 +25,8 @@ from services.ai_generator import (
     generate_cover_letter_latex_stream,
     compile_latex_to_pdf,
 )
+from routers.auth import get_current_user
+import models
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,7 @@ router = APIRouter(prefix="/api", tags=["AI Generation"])
 @router.post("/generate-cv")
 def api_generate_cv(
     request: GenerateCVRequest,
+    current_user: models.User = Depends(get_current_user)
 ):
     """
     Generate a targeted CV using AI (Streaming).
@@ -47,6 +50,7 @@ def api_generate_cv(
         generate_cv_latex_stream(
             candidate_profile=request.candidate_profile.model_dump(),
             job_description=request.job_description,
+            special_instructions=request.special_instructions,
         ),
         media_type="text/event-stream"
     )
@@ -58,6 +62,7 @@ def api_generate_cv(
 @router.post("/generate-cover-letter")
 def api_generate_cover_letter(
     request: GenerateCoverLetterRequest,
+    current_user: models.User = Depends(get_current_user)
 ):
     """
     Generate a targeted Cover Letter using AI (Streaming).
@@ -67,6 +72,7 @@ def api_generate_cover_letter(
         generate_cover_letter_latex_stream(
             candidate_profile=request.candidate_profile.model_dump(),
             job_description=request.job_description,
+            special_instructions=request.special_instructions,
         ),
         media_type="text/event-stream"
     )
@@ -79,6 +85,7 @@ def api_generate_cover_letter(
 def api_compile_latex(
     request: CompileLatexRequest,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     """
     Takes raw LaTeX content (whether originally from AI or manually edited),
@@ -90,6 +97,8 @@ def api_compile_latex(
         workspace = db.query(Workspace).filter(Workspace.id == request.workspace_id).first()
         if not workspace:
             raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+        if workspace.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
 
     # Step 1: Compile the provided LaTeX to PDF via Tectonic
     pdf_base64 = compile_latex_to_pdf(request.latex_content)
