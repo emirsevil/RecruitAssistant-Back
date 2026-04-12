@@ -44,6 +44,7 @@ class ProjectEntry(BaseModel):
     """A single project entry."""
     name: str
     description: str
+    date: Optional[str] = None
     technologies: list[str] = Field(default_factory=list)
     url: Optional[str] = None
 
