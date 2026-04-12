@@ -1,4 +1,4 @@
-FROM rust:1.82-bookworm AS tectonic-builder
+FROM rust:1.85-bookworm AS tectonic-builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
