@@ -47,6 +47,7 @@ def api_generate_cv(
         generate_cv_latex_stream(
             candidate_profile=request.candidate_profile.model_dump(),
             job_description=request.job_description,
+            special_instructions=request.special_instructions,
         ),
         media_type="text/event-stream"
     )
@@ -67,6 +68,7 @@ def api_generate_cover_letter(
         generate_cover_letter_latex_stream(
             candidate_profile=request.candidate_profile.model_dump(),
             job_description=request.job_description,
+            special_instructions=request.special_instructions,
         ),
         media_type="text/event-stream"
     )

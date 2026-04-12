@@ -44,6 +44,7 @@ class ProjectEntry(BaseModel):
     """A single project entry."""
     name: str
     description: str
+    date: Optional[str] = None
     technologies: list[str] = Field(default_factory=list)
     url: Optional[str] = None
 
@@ -88,6 +89,10 @@ class GenerateCVRequest(BaseModel):
         None,
         description="If provided, the generated CV will be linked to this workspace",
     )
+    special_instructions: Optional[str] = Field(
+        None,
+        description="Custom instructions for AI generation",
+    )
 
 
 class GenerateCoverLetterRequest(BaseModel):
@@ -99,6 +104,10 @@ class GenerateCoverLetterRequest(BaseModel):
     workspace_id: Optional[int] = Field(
         None,
         description="If provided, the generated cover letter will be saved to this workspace",
+    )
+    special_instructions: Optional[str] = Field(
+        None,
+        description="Custom instructions for AI generation",
     )
 
 
