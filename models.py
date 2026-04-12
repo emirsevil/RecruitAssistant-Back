@@ -18,6 +18,7 @@ class User(Base):
     cvs = relationship("CV", back_populates="owner")
     workspaces = relationship("Workspace", back_populates="owner")
     quiz_scores = relationship("QuizScore", back_populates="user")
+    schedule_events = relationship("ScheduleEvent", back_populates="user")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -125,3 +126,19 @@ class QuizScore(Base):
     # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
     workspace = relationship("Workspace", back_populates="quiz_scores")
+
+# 8. SCHEDULE EVENT (Haftalık Takvim Etkinlikleri)
+class ScheduleEvent(Base):
+    __tablename__ = "schedule_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)  # interview, quiz, practice, other
+    description = Column(Text, nullable=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # İlişkiler
+    user = relationship("User", back_populates="schedule_events")

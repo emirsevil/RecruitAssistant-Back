@@ -76,6 +76,37 @@ def run_migration():
             else:
                 print("hashed_password already exists in users.")
 
+            # Check schedule_events table
+            result = conn.execute(text("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_name='schedule_events'
+            """))
+            has_schedule_events = result.first() is not None
+
+            if not has_schedule_events:
+                print("Creating schedule_events table...")
+                conn.execute(text("""
+                    CREATE TABLE schedule_events (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        title VARCHAR NOT NULL,
+                        event_type VARCHAR NOT NULL,
+                        description TEXT,
+                        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_schedule_events_id ON schedule_events (id)"))
+                conn.execute(text("CREATE INDEX ix_schedule_events_user_id ON schedule_events (user_id)"))
+                conn.execute(text("CREATE INDEX ix_schedule_events_start_time ON schedule_events (start_time)"))
+                conn.execute(text("CREATE INDEX ix_schedule_events_end_time ON schedule_events (end_time)"))
+                conn.commit()
+                print("Successfully created schedule_events table.")
+            else:
+                print("schedule_events table already exists.")
+
             print("Final migration complete! 🚀")
     except Exception as e:
         print("Error during migration:", e)
