@@ -22,5 +22,5 @@ websockets>=12.0
 python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
-bcrypt
+bcrypt<4.0.0
 pyasn1==0.4.8
