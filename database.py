@@ -10,6 +10,10 @@ load_dotenv()
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 if SQLALCHEMY_DATABASE_URL:
     SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.strip().strip('"').strip("'")
+    
+    # [Yeni Hibrit Mantık]: Docker dışında çalışıyorsak adresi localhost'a çevir
+    if not os.path.exists("/.dockerenv") and "host.docker.internal" in SQLALCHEMY_DATABASE_URL:
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("host.docker.internal", "localhost")
 
 if not SQLALCHEMY_DATABASE_URL:
     raise ValueError("DATABASE_URL ortam değişkeni bulunamadı veya boş! Lütfen .env dosyanızı veya Docker ortam değişkenlerinizi kontrol edin.")
