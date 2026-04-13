@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -18,6 +18,11 @@ class User(Base):
     cvs = relationship("CV", back_populates="owner")
     workspaces = relationship("Workspace", back_populates="owner")
     quiz_scores = relationship("QuizScore", back_populates="user")
+    schedule_events = relationship("ScheduleEvent", back_populates="user")
+    dashboard_progress = relationship("DashboardUserProgress", back_populates="user", uselist=False)
+    activity_logs = relationship("ActivityLog", back_populates="user")
+    skill_scores = relationship("SkillScore", back_populates="user")
+    weekly_goals = relationship("WeeklyGoal", back_populates="user")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -125,3 +130,74 @@ class QuizScore(Base):
     # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
     workspace = relationship("Workspace", back_populates="quiz_scores")
+
+# 8. SCHEDULE EVENT (Haftalık Takvim Etkinlikleri)
+class ScheduleEvent(Base):
+    __tablename__ = "schedule_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)  # interview, quiz, practice, other
+    description = Column(Text, nullable=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # İlişkiler
+    user = relationship("User", back_populates="schedule_events")
+
+# 9. DASHBOARD USER PROGRESS (Panel metrikleri)
+class DashboardUserProgress(Base):
+    __tablename__ = "dashboard_user_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    completed_interviews = Column(Integer, nullable=False, default=0)
+    avg_hr_score = Column(Integer, nullable=True)
+    avg_technical_score = Column(Integer, nullable=True)
+    cv_ats_score = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="dashboard_progress")
+
+# 10. ACTIVITY LOG (Panel zaman çizelgesi)
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    activity_type = Column(String, nullable=False, default="general")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user = relationship("User", back_populates="activity_logs")
+
+# 11. SKILL SCORE (Odaklanılacak beceriler)
+class SkillScore(Base):
+    __tablename__ = "skill_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    skill_name = Column(String, nullable=False)
+    category = Column(String, nullable=True)
+    score = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="skill_scores")
+
+# 12. WEEKLY GOAL (Haftalık hedefler)
+class WeeklyGoal(Base):
+    __tablename__ = "weekly_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    week_start = Column(Date, nullable=False, index=True)
+    interviews_target = Column(Integer, nullable=False, default=5)
+    quizzes_target = Column(Integer, nullable=False, default=2)
+    practice_minutes_target = Column(Integer, nullable=False, default=300)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="weekly_goals")
