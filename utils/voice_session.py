@@ -387,8 +387,13 @@ class VoiceInterviewSession:
 
                     elif msg_type == "error":
                         err_msg = data.get('error', 'Unknown Cartesia error')
-                        print(f"[TTS] Cartesia API Error: {err_msg}")
-                        await self.send_json({"type": "error", "message": f"Ses üretim hatası (Cartesia): {err_msg}"})
+                        err_context = data.get('context_id', '')
+                        # Ignore errors for cancelled/stale contexts (expected after _cancel_tts)
+                        if err_context and err_context != self._current_tts_context_id:
+                            print(f"[TTS] Ignoring stale error for cancelled context {err_context}: {err_msg}")
+                        else:
+                            print(f"[TTS] Cartesia API Error: {err_msg}")
+                            await self.send_json({"type": "error", "message": f"Ses üretim hatası (Cartesia): {err_msg}"})
 
                 except json.JSONDecodeError:
                     # Binary message (shouldn't happen with Cartesia TTS, but handle it)
