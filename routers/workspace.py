@@ -113,7 +113,6 @@ def generate_quizzes_for_workspace(
     current_user: models.User = Depends(get_current_user)
 ):
     """Generate quizzes for a workspace owned by the authenticated user."""
-    # Retrieve workspace to get job description
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
@@ -123,32 +122,41 @@ def generate_quizzes_for_workspace(
     job_desc = workspace.job_description or ""
     generated = generate_quizzes_from_job_description(job_desc)
     
-    # Use a dictionary to group by (title, difficulty)
-    grouped_data = {}
+    quiz_groups = []
     
-    for q in generated:
-        title = q.get("title", "Technical Quiz")
-        diff = q.get("difficulty", "Medium")
+    # Process each generated group (title, difficulty, questions)
+    for g in generated:
+        title = g.get("title", "Technical Quiz")
+        diff = g.get("difficulty", "Medium")
+        questions_raw = g.get("questions", [])
         
-        quiz_data = quiz_schema.QuizCreate(
+        # 1. Create the Quiz Group Header
+        new_quiz = quiz_crud.create_quiz(db, quiz=quiz_schema.QuizBase(
             workspace_id=workspace_id,
             title=title,
+            difficulty=diff
+        ))
+        
+        # 2. Add Questions to this specific Quiz ID
+        saved_questions = []
+        for q_raw in questions_raw:
+            q_data = quiz_schema.QuestionCreate(
+                quiz_id=new_quiz.id,
+                question=q_raw.get("question", ""),
+                options=q_raw.get("options", []),
+                correct_answer=q_raw.get("correct_answer", "")
+            )
+            saved_questions.append(quiz_crud.create_question(db, question=q_data))
+            
+        quiz_groups.append(quiz_schema.QuizGroupResponse(
+            id=new_quiz.id,
+            title=title,
             difficulty=diff,
-            question=q.get("question", ""),
-            options=q.get("options", []),
-            correct_answer=q.get("correct_answer", "")
-        )
-        created = quiz_crud.create_quiz(db, quiz=quiz_data)
+            questions=saved_questions,
+            attempts_count=0
+        ))
         
-        key = (title, diff)
-        if key not in grouped_data:
-            grouped_data[key] = []
-        grouped_data[key].append(created)
-        
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
+    return quiz_groups
 
 
 @router.get("/{workspace_id}/quizzes", response_model=list[quiz_schema.QuizGroupResponse])
@@ -157,29 +165,27 @@ def list_workspace_quizzes(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Fetch all quizzes for a workspace owned by the authenticated user, grouped by topic."""
+    """Fetch all quizzes for a workspace owned by the authenticated user."""
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
     if workspace.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
         
-    quizzes = quiz_crud.list_quizzes(db=db, workspace_id=workspace_id)
+    db_quizzes = quiz_crud.list_quizzes(db=db, workspace_id=workspace_id)
     
-    # Group by title and difficulty
-    grouped_data = {}
-    for q in quizzes:
-        title = q.title or "Technical Quiz"
-        diff = q.difficulty or "Medium"
-        key = (title, diff)
-        if key not in grouped_data:
-            grouped_data[key] = []
-        grouped_data[key].append(q)
+    response_data = []
+    for q in db_quizzes:
+        attempts = quiz_crud.count_quiz_attempts(db, q.id, current_user.id)
+        response_data.append(quiz_schema.QuizGroupResponse(
+            id=q.id,
+            title=q.title,
+            difficulty=q.difficulty,
+            questions=q.questions, # Relationship will pull these
+            attempts_count=attempts
+        ))
         
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
+    return response_data
 
 
 @router.post("/{workspace_id}/skills/extract", response_model=list[str])
@@ -220,33 +226,37 @@ def generate_targeted_workspace_quizzes(
     
     generated = generate_targeted_quizzes(job_desc, selections, language=request.language or "tr")
     
-    grouped_data = {}
+    quiz_groups = []
     
-    for group in generated:
-        title = group.get("title", "Technical Quiz")
-        diff = group.get("difficulty", "Medium")
-        questions = group.get("questions", [])
+    for group_data in generated:
+        title = group_data.get("title", "Technical Quiz")
+        diff = group_data.get("difficulty", "Medium")
+        questions_raw = group_data.get("questions", [])
+        
+        # 1. Create the Quiz Group Header
+        new_quiz = quiz_crud.create_quiz(db, quiz=quiz_schema.QuizBase(
+            workspace_id=workspace_id,
+            title=title,
+            difficulty=diff
+        ))
         
         saved_questions = []
-        for q in questions:
-            quiz_data = quiz_schema.QuizCreate(
-                workspace_id=workspace_id,
-                title=title,
-                difficulty=diff,
-                question=q.get("question", ""),
-                options=q.get("options", []),
-                correct_answer=q.get("correct_answer", "")
+        for q_raw in questions_raw:
+            q_data = quiz_schema.QuestionCreate(
+                quiz_id=new_quiz.id,
+                question=q_raw.get("question", ""),
+                options=q_raw.get("options", []),
+                correct_answer=q_raw.get("correct_answer", "")
             )
-            created = quiz_crud.create_quiz(db, quiz=quiz_data)
-            saved_questions.append(created)
+            saved_questions.append(quiz_crud.create_question(db, question=q_data))
             
         if saved_questions:
-            key = (title, diff)
-            if key not in grouped_data:
-                grouped_data[key] = []
-            grouped_data[key].extend(saved_questions)
+            quiz_groups.append(quiz_schema.QuizGroupResponse(
+                id=new_quiz.id,
+                title=title,
+                difficulty=diff,
+                questions=saved_questions,
+                attempts_count=0
+            ))
     
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
+    return quiz_groups

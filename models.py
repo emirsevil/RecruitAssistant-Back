@@ -59,7 +59,6 @@ class Workspace(Base):
     quizzes = relationship("Quiz", back_populates="workspace")
     interviews = relationship("Interview", back_populates="workspace")
     cover_letters = relationship("CoverLetter", back_populates="workspace")
-    quiz_scores = relationship("QuizScore", back_populates="workspace")
 
 # 4. COVER LETTER (Niyet Mektupları Tablosu) - YENİ EKLENDİ
 class CoverLetter(Base):
@@ -74,23 +73,34 @@ class CoverLetter(Base):
     # İlişkiler
     workspace = relationship("Workspace", back_populates="cover_letters")
 
-# 5. QUIZ (Sınavlar Tablosu)
+# 5. QUIZ (Sınavlar Tablosu - Gruplama Üst Tablosu)
 class Quiz(Base):
     __tablename__ = "quizzes"
 
     id = Column(Integer, primary_key=True, index=True)
-    # Genel quizler için null kalabilir, o yüzden nullable=True yapıyoruz
-    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True) 
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True)
     title = Column(String, nullable=True) # Konu başlığı (Örn: SQL, Java)
     difficulty = Column(String, nullable=True) # Zorluk seviyesi: Easy, Medium, Hard
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # İlişkiler
+    workspace = relationship("Workspace", back_populates="quizzes")
+    questions = relationship("Question", back_populates="quiz", cascade="all, delete-orphan")
+    quiz_scores = relationship("QuizScore", back_populates="quiz", cascade="all, delete-orphan")
+
+# 5.1. QUESTION (Sınav Soruları Tablosu)
+class Question(Base):
+    __tablename__ = "questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=True)
     
     question = Column(String, nullable=False)
-    # Şıkları ["A", "B", "C", "D"] şeklinde liste olarak tutmak için JSON kullanıyoruz
     options = Column(JSON, nullable=False)  
     correct_answer = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    workspace = relationship("Workspace", back_populates="quizzes")
+    quiz = relationship("Quiz", back_populates="questions")
 
 # 6. INTERVIEW (Mülakatlar Tablosu)
 class Interview(Base):
@@ -120,14 +130,14 @@ class QuizScore(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
-    quiz_title = Column(String, nullable=False)  # Skill/konu adı (Örn: "Python", "SQL")
-    difficulty = Column(String, nullable=False)  # Zorluk seviyesi (Örn: "Easy", "Medium", "Hard")
+    quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False)
+    
     score = Column(Integer, nullable=False)  # Yüzdelik skor (0-100)
+    attempt_number = Column(Integer, nullable=False, default=1) # 1, 2 veya 3
     total_questions = Column(Integer, nullable=False)
     correct_answers = Column(Integer, nullable=False)
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
-    workspace = relationship("Workspace", back_populates="quiz_scores")
+    quiz = relationship("Quiz", back_populates="quiz_scores")

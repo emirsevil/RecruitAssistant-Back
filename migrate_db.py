@@ -1,106 +1,46 @@
 import os
+import logging
+import subprocess
+import sys
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
-from database import engine
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("migration")
 
 def run_migration():
-    print("Connecting to database...")
+    """
+    Runs Alembic migrations in a subprocess to ensure complete isolation 
+    from the main application's event loop and logging configuration.
+    This prevents deadlocks during startup.
+    """
+    logger.info("Starting database migration process (via subprocess)...")
+    
     try:
-        with engine.connect() as conn:
-            # Check cover_letters columns
-            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='cover_letters'"))
-            cols = [row[0] for row in result]
-            print(f"cover_letters columns: {cols}")
-
-            if "latex_content" not in cols:
-                print("Adding latex_content to cover_letters...")
-                conn.execute(text("ALTER TABLE cover_letters ADD COLUMN latex_content TEXT"))
-                conn.commit()
-                print("Successfully added latex_content to cover_letters.")
-            else:
-                print("latex_content already exists in cover_letters.")
-
-            # Check cvs columns
-            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='cvs'"))
-            cols = [row[0] for row in result]
-            print(f"cvs columns: {cols}")
-
-            if "latex_content" not in cols:
-                print("Adding latex_content to cvs...")
-                conn.execute(text("ALTER TABLE cvs ADD COLUMN latex_content TEXT"))
-                conn.commit()
-                print("Successfully added latex_content to cvs.")
-            else:
-                print("latex_content already exists in cvs.")
-
-            # NEW: Make file_url nullable if it isn't
-            print("Updating file_url in cvs to be nullable...")
-            conn.execute(text("ALTER TABLE cvs ALTER COLUMN file_url DROP NOT NULL"))
-            conn.commit()
-            print("Successfully updated file_url in cvs.")
-
-            print("Database migration complete! 🎉")
-
-            # Check workspaces columns
-            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='workspaces'"))
-            cols = [row[0] for row in result]
-            print(f"workspaces columns: {cols}")
-
-            new_ws_cols = {
-                "job_name": "TEXT",
-                "emoji": "TEXT",
-                "color": "TEXT"
-            }
-
-            for col_name, col_type in new_ws_cols.items():
-                if col_name not in cols:
-                    print(f"Adding {col_name} to workspaces...")
-                    conn.execute(text(f"ALTER TABLE workspaces ADD COLUMN {col_name} {col_type}"))
-                    conn.commit()
-                    print(f"Successfully added {col_name} to workspaces.")
-                else:
-                    print(f"{col_name} already exists in workspaces.")
-
-            print("Workspace migration complete! 🎉")
-            
-            # Check users columns
-            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='users'"))
-            cols = [row[0] for row in result]
-            print(f"users columns: {cols}")
-
-            # 1. Rename university to education if university exists
-            if "university" in cols and "education" not in cols:
-                print("Renaming university to education in users...")
-                conn.execute(text("ALTER TABLE users RENAME COLUMN university TO education"))
-                conn.commit()
-                print("Successfully renamed university to education.")
-            
-            # 2. Add other missing columns
-            new_user_cols = {
-                "phone": "TEXT",
-                "address": "TEXT",
-                "bio": "TEXT",
-                "professional_title": "TEXT",
-                "education": "TEXT", # In case it didn't exist and wasn't renamed
-                "skills": "TEXT",
-                "profile_image": "TEXT",
-                "hashed_password": "TEXT"
-            }
-
-            for col_name, col_type in new_user_cols.items():
-                # Re-fetch columns after possible rename
-                res = conn.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='{col_name}'"))
-                if not res.fetchone():
-                    print(f"Adding {col_name} to users...")
-                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
-                    conn.commit()
-                    print(f"Successfully added {col_name} to users.")
-                else:
-                    print(f"{col_name} already exists in users.")
-
-            print("Final migration complete! 🚀")
+        # Run 'alembic upgrade head' as a separate process
+        # This is safer than programmatic API when running inside the app
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        # Log the output from alembic
+        if result.stdout:
+            for line in result.stdout.splitlines():
+                logger.info(f"Alembic: {line}")
+        
+        logger.info("Database migration complete! 🎉")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error during migration: {e.stderr}")
+        logger.info("TIP: If you see an IntegrityError or conflict, run 'python fix_db.py' to resolve data conflicts.")
+        # We don't want to crash everything if it's already up to date 
+        # but check=True will raise if return code is non-zero
+        raise e
     except Exception as e:
-        print("Error during migration:", e)
+        logger.error(f"Unexpected error: {e}")
+        raise e
 
 if __name__ == "__main__":
     load_dotenv()

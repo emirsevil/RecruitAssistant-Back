@@ -2,90 +2,101 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
 
-class QuizBase(BaseModel):
-    workspace_id: Optional[int] = None
-    title: Optional[str] = None
-    difficulty: Optional[str] = None  # Easy, Medium, Hard
+# --- Question Schemas (Individual questions) ---
+class QuestionBase(BaseModel):
     question: str
     options: List[str]
 
     class Config:
         from_attributes = True
 
-class QuizCreate(QuizBase):
+class QuestionCreate(QuestionBase):
+    quiz_id: int
     correct_answer: str
 
-class QuizUpdate(BaseModel):
-    workspace_id: Optional[int] = None
-    title: Optional[str] = None
-    difficulty: Optional[str] = None
-    question: Optional[str] = None
-    options: Optional[List[str]] = None
-    # correct_answer is not exposed in response, but can be updated
-    correct_answer: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-class QuizResponse(QuizBase):
+class QuestionResponse(QuestionBase):
     id: int
+    quiz_id: int
     created_at: datetime
 
     class Config:
         from_attributes = True
 
+# --- Quiz Schemas (Groups of questions) ---
+class QuizBase(BaseModel):
+    workspace_id: Optional[int] = None
+    title: str
+    difficulty: str  # Easy, Medium, Hard
+
+    class Config:
+        from_attributes = True
+
+class QuizCreate(QuizBase):
+    pass
+
+class QuizResponse(QuizBase):
+    id: int
+    created_at: datetime
+    questions: List[QuestionResponse] = []
+
+    class Config:
+        from_attributes = True
+
 class QuizGroupResponse(BaseModel):
+    """Used for UI to show a quiz and its questions together."""
+    id: int
     title: str
     difficulty: str
-    questions: List[QuizResponse]
-
+    questions: List[QuestionResponse]
+    attempts_count: int = 0  # Number of attempts already made by the user
 
 # --- Quiz Submit & Score Schemas ---
 
 class AnswerItem(BaseModel):
-    """Tek bir soruya verilen cevap."""
-    quiz_id: int          # Sorunun DB'deki id'si
-    selected_answer: str  # Kullanıcının seçtiği şık
+    """Answer for a single question."""
+    question_id: int      # Question's DB id
+    selected_answer: str  # Chosen option
 
 class QuizSubmit(BaseModel):
-    """Kullanıcı quiz'i bitirince bu body ile submit eder."""
-    user_id: Optional[int] = None
-    workspace_id: int
-    quiz_title: str       # Hangi skill/konu grubu (Örn: "Python")
-    difficulty: str       # Hangi zorluk seviyesi (Örn: "Easy")
+    """Body sent when a user finishes a quiz."""
+    quiz_id: int          # The specific quiz set ID
     answers: List[AnswerItem]
 
 class QuestionResult(BaseModel):
-    """Her soru için doğru/yanlış detayı."""
-    quiz_id: int
+    """Result detail for each question."""
+    question_id: int
     question: str
     selected_answer: str
     correct_answer: str
     is_correct: bool
 
 class QuizSubmitResponse(BaseModel):
-    """Submit sonrası dönen detaylı sonuç."""
-    quiz_title: str
-    score: int              # Yüzdelik (0-100)
+    """Detailed result returned after submission."""
+    quiz_id: int
+    score: int              # Percentage (0-100)
     correct_count: int
     total_questions: int
     results: List[QuestionResult]
-    score_id: int           # Kaydedilen QuizScore'un id'si
+    score_id: int           # Saved QuizScore entry ID
+    attempt_number: int     # 1, 2, or 3
 
 class QuizScoreResponse(BaseModel):
-    """Daha önce kaydedilmiş skorları listelemek için."""
+    """For listing past results."""
     id: int
     user_id: int
-    workspace_id: int
-    quiz_title: str
-    difficulty: str
+    quiz_id: int
+    quiz_title: str # Calculated from relation
+    difficulty: str # Calculated from relation
     score: int
     total_questions: int
     correct_answers: int
+    attempt_number: int
     completed_at: datetime
 
     class Config:
         from_attributes = True
+
+# --- Selection & Request Schemas ---
 
 class SkillSelection(BaseModel):
     title: str
