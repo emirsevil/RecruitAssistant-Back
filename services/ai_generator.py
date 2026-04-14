@@ -218,7 +218,7 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str, spec
         model=model,
         temperature=0.3,
         messages=[
-            {"role": "system", "content": CV_SYSTEM_PROMPT},
+            {"role": "system", "content": CV_SYSTEM_PROMPT + "\n\n" + lang_instruction},
             {"role": "user", "content": _build_user_message(candidate_profile, job_description, special_instructions, prioritize=True)},
         ],
         stream=True,
@@ -241,8 +241,11 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
         if company_name
         else "=== TARGET COMPANY NAME ===\nUNKNOWN\nOmit the company-name line in the recipient header. Never output Company Name."
     )
+    
+    lang_instruction = f"Output Language: {language.upper()}. Ensure the entire cover letter is written strictly in {language.upper()}."
+    
     cover_letter_instructions = "\n\n".join(
-        part for part in [company_instruction, special_instructions] if part
+        part for part in [company_instruction, lang_instruction, special_instructions] if part
     )
 
     response = client.chat.completions.create(

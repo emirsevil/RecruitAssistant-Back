@@ -43,7 +43,7 @@ def extract_skills_from_job_description(job_desc: str) -> List[str]:
         logger.error(f"Error extracting skills: {e}")
         return []
 
-def generate_targeted_quizzes(job_desc: str, selections: List[Dict]) -> List[Dict]:
+def generate_targeted_quizzes(job_desc: str, selections: List[Dict], language: str = "tr") -> List[Dict]:
     """
     Generates quizzes for specific skills and difficulties.
     'selections' is a list of { "title": "SkillName", "difficulties": ["Easy", "Medium"] }
@@ -54,9 +54,15 @@ def generate_targeted_quizzes(job_desc: str, selections: List[Dict]) -> List[Dic
     # Construct a detailed prompt for targeted generation
     selections_str = json.dumps(selections, indent=2)
     
+    lang_instruction = f"MANDATORY: Generate all quiz content (questions, options, and correct answers) strictly in {language.upper()}."
+    if language.lower() == "tr":
+        lang_instruction += " (Türkçe karakterleri düzgün kullan)."
+
     prompt = f"""
     You are an expert Technical Interviewer.
     Generate technical quiz questions based on the Job Description and the specific Skill/Difficulty selections provided below.
+    
+    {lang_instruction}
     
     Job Description:
     {job_desc}
@@ -105,19 +111,15 @@ def generate_targeted_quizzes(job_desc: str, selections: List[Dict]) -> List[Dic
             content = content.split("```")[-1].split("```")[0].strip()
             
         raw_data = json.loads(content)
-        
-        # Flatten and validate the results to match original QuizCreate format if needed by router
-        # However, the router groups them back, so let's return it structured as requested.
-        # Note: The caller (router) will decide how to iterate and save them.
         return raw_data if isinstance(raw_data, list) else []
     except Exception as e:
         logger.error(f"Error generating targeted quizzes: {e}")
         return []
 
-# Keeping the old function for backward compatibility if needed, but updating its model
-def generate_quizzes_from_job_description(job_desc: str) -> List[Dict]:
+
+def generate_quizzes_from_job_description(job_desc: str, language: str = "tr") -> List[Dict]:
     """Legacy function, now using gpt-4o for better quality."""
     skills = extract_skills_from_job_description(job_desc)
     # Just pick top 3 for auto-generation if this is still used
     subset = [{"title": s, "difficulties": ["Medium"]} for s in skills[:3]]
-    return generate_targeted_quizzes(job_desc, subset)
+    return generate_targeted_quizzes(job_desc, subset, language=language)
