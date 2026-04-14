@@ -1,15 +1,10 @@
 import json
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from utils.ai_client import get_ai_client, get_model_name
 
 def evaluate_interview(qa_pairs: list, job_description: str, difficulty: str) -> dict:
     """
-    Evaluates all question-answer pairs in a single OpenAI call.
+    Evaluates all question-answer pairs in a single LLM call.
     Returns per-question scores/feedback and an overall score.
     """
     
@@ -49,8 +44,10 @@ SADECE geçerli bir JSON nesnesi döndür:
 """
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="fast")
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Evaluate the interview answers."}

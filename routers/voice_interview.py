@@ -22,6 +22,11 @@ from routers.auth import get_current_user, get_current_user_ws
 import models
 
 router = APIRouter(tags=["Voice Interview"])
+
+# NOTE: This OpenAI client is used ONLY for Whisper STT (speech-to-text).
+# Whisper is an OpenAI-only API with no equivalent in Gemini or other providers.
+# All other LLM calls (question generation, conversation, evaluation) go through
+# the centralized provider in utils/ai_client.py.
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @router.post("/voice-interview/transcribe")

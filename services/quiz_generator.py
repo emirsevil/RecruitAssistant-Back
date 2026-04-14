@@ -1,14 +1,10 @@
-import os
 import json
 import logging
-from openai import OpenAI
 from typing import List, Dict
 
-logger = logging.getLogger(__name__)
+from utils.ai_client import get_ai_client, get_model_name
 
-# Initialize client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-MODEL = "gpt-4o"
+logger = logging.getLogger(__name__)
 
 def extract_skills_from_job_description(job_desc: str) -> List[str]:
     """
@@ -26,8 +22,10 @@ def extract_skills_from_job_description(job_desc: str) -> List[str]:
     """
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="default")
         response = client.chat.completions.create(
-            model=MODEL,
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
@@ -98,8 +96,10 @@ def generate_targeted_quizzes(job_desc: str, selections: List[Dict], language: s
     """
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="default")
         response = client.chat.completions.create(
-            model=MODEL,
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
