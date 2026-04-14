@@ -107,7 +107,7 @@ def _build_derived_activity(db: Session, user_id: int, limit: int) -> list[Activ
     for score in quiz_scores:
         activities.append(ActivityLogResponse(
             id=f"quiz-score-{score.id}",
-            title=f"Completed {score.quiz_title} Quiz",
+            title=f"Completed {score.quiz.title if score.quiz else 'Unknown'} Quiz",
             description=f"{score.correct_answers}/{score.total_questions} correct - {score.score}%",
             activity_type="quiz",
             created_at=score.completed_at,
@@ -154,12 +154,13 @@ def _get_skill_scores(db: Session, user_id: int) -> list[SkillScoreResponse]:
 
     quiz_groups = (
         db.query(
-            models.QuizScore.quiz_title,
+            models.Quiz.title.label("quiz_title"),
             func.avg(models.QuizScore.score).label("avg_score"),
             func.max(models.QuizScore.completed_at).label("updated_at"),
         )
+        .join(models.Quiz, models.QuizScore.quiz_id == models.Quiz.id)
         .filter(models.QuizScore.user_id == user_id)
-        .group_by(models.QuizScore.quiz_title)
+        .group_by(models.Quiz.title)
         .order_by(func.avg(models.QuizScore.score).asc())
         .limit(4)
         .all()
