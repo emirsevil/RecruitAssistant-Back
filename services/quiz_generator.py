@@ -15,6 +15,7 @@ async def extract_skills_from_job_description(job_desc: str) -> List[str]:
 
     prompt = f"""
     Analyze the following Job Description and extract the top 10 most important technical skills, programming languages, tools, or frameworks mentioned.
+    MANDATORY: Keep the skill names in their original language as found in the Job Description or their standard technical form (e.g., 'Software Development Life Cycle'). DO NOT translate technical terms into another language.
     Return ONLY a JSON list of strings. No markdown formatting.
     
     Job Description:
@@ -88,7 +89,8 @@ async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], langu
         Requirements:
         1. Generate exactly 5 to 8 unique questions for this difficulty.
         2. Each question MUST have 4 options and 1 correct_answer.
-        3. MANDATORY: The output must be a valid JSON array of objects with this structure:
+        3. MANDATORY: The "title" field in the JSON MUST be exactly "{skill_name}". DO NOT translate or modify the skill name.
+        4. MANDATORY: The output must be a valid JSON array of objects with this structure:
         [
           {{
             "title": "{skill_name}",

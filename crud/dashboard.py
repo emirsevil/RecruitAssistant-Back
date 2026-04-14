@@ -12,6 +12,7 @@ from schemas.dashboard import (
     DashboardUpcomingEventResponse,
     SkillScoreResponse,
     WeeklyGoalsResponse,
+    WeeklyGoalUpdate,
 )
 
 
@@ -298,3 +299,35 @@ def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
             for event in upcoming_events
         ],
     )
+
+
+def update_or_create_weekly_goal(db: Session, user_id: int, goals: WeeklyGoalUpdate) -> models.WeeklyGoal:
+    now = datetime.now(timezone.utc)
+    week_start = _start_of_week(now).date()
+
+    db_goal = (
+        db.query(models.WeeklyGoal)
+        .filter(
+            models.WeeklyGoal.user_id == user_id,
+            models.WeeklyGoal.week_start == week_start,
+        )
+        .first()
+    )
+
+    if db_goal:
+        db_goal.interviews_target = goals.interviews_target
+        db_goal.quizzes_target = goals.quizzes_target
+        db_goal.practice_minutes_target = goals.practice_minutes_target
+    else:
+        db_goal = models.WeeklyGoal(
+            user_id=user_id,
+            week_start=week_start,
+            interviews_target=goals.interviews_target,
+            quizzes_target=goals.quizzes_target,
+            practice_minutes_target=goals.practice_minutes_target,
+        )
+        db.add(db_goal)
+
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
