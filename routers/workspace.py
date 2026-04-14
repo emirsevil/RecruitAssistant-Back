@@ -107,7 +107,7 @@ def remove_workspace(
     return None
 
 @router.post("/{workspace_id}/quizzes/generate", response_model=list[quiz_schema.QuizGroupResponse])
-def generate_quizzes_for_workspace(
+async def generate_quizzes_for_workspace(
     workspace_id: int, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -120,7 +120,7 @@ def generate_quizzes_for_workspace(
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
         
     job_desc = workspace.job_description or ""
-    generated = generate_quizzes_from_job_description(job_desc)
+    generated = await generate_quizzes_from_job_description(job_desc)
     
     quiz_groups = []
     
@@ -189,7 +189,7 @@ def list_workspace_quizzes(
 
 
 @router.post("/{workspace_id}/skills/extract", response_model=list[str])
-def extract_workspace_skills(
+async def extract_workspace_skills(
     workspace_id: int, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -205,10 +205,10 @@ def extract_workspace_skills(
     if not job_desc:
         return []
     
-    return extract_skills_from_job_description(job_desc)
+    return await extract_skills_from_job_description(job_desc)
 
 @router.post("/{workspace_id}/quizzes/generate-targeted", response_model=list[quiz_schema.QuizGroupResponse])
-def generate_targeted_workspace_quizzes(
+async def generate_targeted_workspace_quizzes(
     workspace_id: int, 
     request: quiz_schema.TargetedQuizRequest,
     db: Session = Depends(get_db),
@@ -224,7 +224,7 @@ def generate_targeted_workspace_quizzes(
     job_desc = workspace.job_description or ""
     selections = [s.model_dump() for s in request.selections]
     
-    generated = generate_targeted_quizzes(job_desc, selections, language=request.language or "tr")
+    generated = await generate_targeted_quizzes(job_desc, selections, language=request.language or "tr")
     
     quiz_groups = []
     
