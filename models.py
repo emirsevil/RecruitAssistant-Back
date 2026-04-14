@@ -24,6 +24,7 @@ class User(Base):
     cvs = relationship("CV", back_populates="owner")
     workspaces = relationship("Workspace", back_populates="owner")
     quiz_scores = relationship("QuizScore", back_populates="user")
+    refresh_tokens = relationship("RefreshToken", back_populates="user")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -141,3 +142,18 @@ class QuizScore(Base):
     # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
     quiz = relationship("Quiz", back_populates="quiz_scores")
+
+# 8. REFRESH TOKEN (Oturum Yenileme Token Tablosu)
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, index=True, nullable=False)
+    login_time = Column(DateTime(timezone=True), nullable=False)   # Hard limit hesabı
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # İlişkiler
+    user = relationship("User", back_populates="refresh_tokens")

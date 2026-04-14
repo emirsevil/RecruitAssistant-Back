@@ -1,16 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, WebSocket
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import os
 
 from database import get_db
 import schemas.user as schemas
 import crud.user as crud
+import crud.refresh_token as refresh_crud
 from utils.auth import (
-    verify_password, 
-    create_access_token, 
+    verify_password,
+    create_access_token,
     decode_access_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    generate_refresh_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+    HARD_LIMIT_HOURS,
 )
 import logging
 logger = logging.getLogger(__name__)
@@ -18,16 +22,56 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 COOKIE_NAME = "access_token"
+REFRESH_COOKIE_NAME = "refresh_token"
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
-# In-memory storage for short-lived WebSocket tickets
-# Format: { ticket_uuid: {"user_id": int, "expires": float} }
+# ── Cookie helpers ────────────────────────────────────────────────────
+
+def _cookie_opts() -> dict:
+    """Shared cookie options for consistency."""
+    return dict(
+        httponly=True,
+        samesite="lax" if not IS_PRODUCTION else "none",
+        secure=IS_PRODUCTION,
+        path="/",
+    )
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str):
+    """Set both access and refresh token cookies on the response."""
+    opts = _cookie_opts()
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        **opts,
+    )
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        expires=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        **opts,
+    )
+
+
+def _clear_auth_cookies(response: Response):
+    """Remove both auth cookies."""
+    opts = _cookie_opts()
+    response.delete_cookie(key=COOKIE_NAME, **opts)
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, **opts)
+
+
+# ── In-memory WebSocket ticket store ─────────────────────────────────
 import uuid
 import time
 ws_tickets = {}
 TICKET_EXPIRY_SECONDS = 60
 
 from typing import Union
+
+# ── Current-user dependencies ────────────────────────────────────────
 
 async def _get_current_user_base(cookies: dict, db: Session):
     token = cookies.get(COOKIE_NAME)
@@ -36,21 +80,21 @@ async def _get_current_user_base(cookies: dict, db: Session):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    
+
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
-    
+
     email: str = payload.get("sub")
     if email is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
-    
+
     user = crud.get_user_by_email(db, email=email)
     if user is None:
         raise HTTPException(
@@ -70,14 +114,14 @@ async def get_current_user_ws(websocket: WebSocket, db: Session = Depends(get_db
     msg = f"[WS-AUTH] Incoming connection attempt. Ticket in URL: {ticket}"
     print(msg)
     logger.info(msg)
-    
+
     if ticket:
         if ticket in ws_tickets:
             ticket_data = ws_tickets.pop(ticket) # One-time use
             msg = f"[WS-AUTH] Found ticket in memory. UserID: {ticket_data['user_id']}, Expiry: {ticket_data['expires']}"
             print(msg)
             logger.info(msg)
-            
+
             if time.time() < ticket_data["expires"]:
                 user = crud.get_user(db, user_id=ticket_data["user_id"])
                 if user:
@@ -106,6 +150,8 @@ async def get_current_user_ws(websocket: WebSocket, db: Session = Depends(get_db
             detail="WebSocket authentication failed",
         )
 
+# ── Endpoints ────────────────────────────────────────────────────────
+
 @router.post("/register", response_model=schemas.UserResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """API endpoint to register a new user."""
@@ -123,7 +169,7 @@ def login(
     credentials: schemas.UserLogin,
     db: Session = Depends(get_db)
 ):
-    """API endpoint to login and receive an HttpOnly cookie."""
+    """Login → issue short-lived access token + DB-backed refresh token."""
     user = crud.get_user_by_email(db, email=credentials.email)
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
@@ -131,45 +177,137 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Cookie"},
         )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    now = datetime.now(timezone.utc)
+
+    # Access token (15 min)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    
-    # Set HttpOnly Cookie
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=access_token,
-        httponly=True,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite="lax" if not IS_PRODUCTION else "none",
-        secure=IS_PRODUCTION, # Set to True in production (requires HTTPS)
-        path="/"
+
+    # Refresh token (7 days, stored in DB)
+    raw_refresh = generate_refresh_token()
+    refresh_crud.create_refresh_token(
+        db=db,
+        user_id=user.id,
+        token=raw_refresh,
+        expires_at=now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        login_time=now,
     )
-    
+
+    # Set cookies
+    _set_auth_cookies(response, access_token, raw_refresh)
+
     return {
-        "message": "Successfully logged in", 
+        "message": "Successfully logged in",
         "user": {
             "email": user.email,
             "full_name": user.full_name,
             "id": user.id,
-            "education": user.education
-        }
+            "education": user.education,
+        },
     }
 
-@router.post("/logout")
-def logout(response: Response):
-    """API endpoint to logout by clearing the HttpOnly cookie."""
-    response.delete_cookie(
-        key=COOKIE_NAME,
-        httponly=True,
-        samesite="lax" if not IS_PRODUCTION else "none",
-        secure=IS_PRODUCTION,
-        path="/"
+
+@router.post("/refresh")
+def refresh_tokens(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Rotate tokens: validate the refresh token, enforce hard limit,
+    revoke the old refresh token, and issue a fresh pair."""
+    old_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not old_refresh:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token",
+        )
+
+    db_token = refresh_crud.get_refresh_token(db, old_refresh)
+    if db_token is None:
+        # Token revoked, expired, or never existed → force re-login
+        _clear_auth_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    # ── Hard limit check ──────────────────────────────────────────
+    now = datetime.now(timezone.utc)
+    login_time = db_token.login_time
+    # Ensure login_time is timezone-aware for comparison
+    if login_time.tzinfo is None:
+        login_time = login_time.replace(tzinfo=timezone.utc)
+
+    if now - login_time > timedelta(hours=HARD_LIMIT_HOURS):
+        # Absolute session limit reached → revoke everything
+        refresh_crud.revoke_all_user_tokens(db, db_token.user_id)
+        _clear_auth_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please log in again.",
+        )
+
+    # ── Token rotation ────────────────────────────────────────────
+    # Revoke old refresh token
+    refresh_crud.revoke_refresh_token(db, old_refresh)
+
+    # Look up the user for the new access token
+    user = crud.get_user(db, user_id=db_token.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # New access token
+    access_token = create_access_token(
+        data={"sub": user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+
+    # New refresh token — inherits the original login_time for hard limit
+    new_refresh = generate_refresh_token()
+    refresh_crud.create_refresh_token(
+        db=db,
+        user_id=user.id,
+        token=new_refresh,
+        expires_at=now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        login_time=db_token.login_time,  # Preserve original login time
+    )
+
+    _set_auth_cookies(response, access_token, new_refresh)
+    return {"message": "Tokens refreshed"}
+
+
+@router.post("/logout")
+def logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Logout: revoke ALL refresh tokens for the user, clear cookies."""
+    # Try to identify the user from the access token to revoke all sessions
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        payload = decode_access_token(token)
+        if payload:
+            email = payload.get("sub")
+            if email:
+                user = crud.get_user_by_email(db, email=email)
+                if user:
+                    refresh_crud.revoke_all_user_tokens(db, user.id)
+
+    # Also try to revoke the specific refresh token even if access token is expired
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if refresh_token:
+        refresh_crud.revoke_refresh_token(db, refresh_token)
+
+    _clear_auth_cookies(response)
     return {"message": "Successfully logged out"}
+
 
 @router.post("/ws-ticket")
 def get_ws_ticket(
