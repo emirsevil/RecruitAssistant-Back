@@ -145,6 +145,7 @@ class QuizScore(Base):
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler
+    # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
     quiz = relationship("Quiz", back_populates="quiz_scores")
 
@@ -162,7 +163,6 @@ class RefreshToken(Base):
 
     # İlişkiler
     user = relationship("User", back_populates="refresh_tokens")
-    workspace = relationship("Workspace", back_populates="quiz_scores")
 
 # 8. SCHEDULE EVENT (Haftalık Takvim Etkinlikleri)
 class ScheduleEvent(Base):
