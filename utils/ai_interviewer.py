@@ -1,11 +1,6 @@
 import json
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from utils.ai_client import get_ai_client, get_model_name
 
 def generate_interview_questions(job_description: str, categories: str, difficulty: str, interview_type: str) -> list:
     system_prompt = f"""
@@ -34,8 +29,14 @@ Example format:
     """
 
     try:
+        client = get_ai_client()
+        model = get_model_name(tier="fast")
         response = client.chat.completions.create(
+<<<<<<< HEAD
             model="gpt-3.5-turbo",
+=======
+            model=model,
+>>>>>>> main
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Generate the interview questions."}
