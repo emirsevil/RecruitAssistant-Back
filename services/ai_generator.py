@@ -208,12 +208,14 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
     return content
 
 
-def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
+def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, language: str = "en") -> Generator[str, None, None]:
     """Stream AI-generated CV LaTeX using a generator."""
     client = get_ai_client()
     model = get_model_name(tier="default")
     logger.info("Streaming CV LaTeX via %s", model)
 
+    lang_instruction = f"Output Language: {language.upper()}. Ensure the entire CV is written strictly in {language.upper()}."
+    
     response = client.chat.completions.create(
         model=model,
         temperature=0.3,
@@ -230,7 +232,7 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str, spec
             yield delta
 
 
-def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
+def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, language: str = "en") -> Generator[str, None, None]:
     """Stream AI-generated Cover Letter LaTeX using a generator."""
     client = get_ai_client()
     model = get_model_name(tier="default")
