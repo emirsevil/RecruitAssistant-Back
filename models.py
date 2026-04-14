@@ -25,14 +25,21 @@ class User(Base):
     workspaces = relationship("Workspace", back_populates="owner")
     quiz_scores = relationship("QuizScore", back_populates="user")
 <<<<<<< HEAD
+<<<<<<< HEAD
     refresh_tokens = relationship("RefreshToken", back_populates="user")
 =======
+=======
+    refresh_tokens = relationship("RefreshToken", back_populates="user")
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
     schedule_events = relationship("ScheduleEvent", back_populates="user")
     dashboard_progress = relationship("DashboardUserProgress", back_populates="user", uselist=False)
     activity_logs = relationship("ActivityLog", back_populates="user")
     skill_scores = relationship("SkillScore", back_populates="user")
     weekly_goals = relationship("WeeklyGoal", back_populates="user")
+<<<<<<< HEAD
 >>>>>>> main
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -150,6 +157,9 @@ class QuizScore(Base):
     # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
     quiz = relationship("Quiz", back_populates="quiz_scores")
 
 # 8. REFRESH TOKEN (Oturum Yenileme Token Tablosu)
@@ -166,7 +176,10 @@ class RefreshToken(Base):
 
     # İlişkiler
     user = relationship("User", back_populates="refresh_tokens")
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
     workspace = relationship("Workspace", back_populates="quiz_scores")
 
 # 8. SCHEDULE EVENT (Haftalık Takvim Etkinlikleri)
@@ -239,4 +252,7 @@ class WeeklyGoal(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="weekly_goals")
+<<<<<<< HEAD
 >>>>>>> main
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c

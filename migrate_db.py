@@ -18,6 +18,9 @@ def run_migration():
     
     try:
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
         # Run 'alembic upgrade head' as a separate process
         # This is safer than programmatic API when running inside the app
         result = subprocess.run(
@@ -39,7 +42,10 @@ def run_migration():
         # We don't want to crash everything if it's already up to date 
         # but check=True will raise if return code is non-zero
         raise e
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
         with engine.connect() as conn:
             # Check cover_letters columns
             result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='cover_letters'"))
@@ -208,7 +214,10 @@ def run_migration():
                     print(f"{table_name} table already exists.")
 
             print("Final migration complete! 🚀")
+<<<<<<< HEAD
 >>>>>>> main
+=======
+>>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         raise e
