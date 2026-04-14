@@ -32,15 +32,7 @@ Example format:
         client = get_ai_client()
         model = get_model_name(tier="fast")
         response = client.chat.completions.create(
-<<<<<<< HEAD
-<<<<<<< HEAD
-            model="gpt-3.5-turbo",
-=======
             model=model,
->>>>>>> main
-=======
-            model=model,
->>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Generate the interview questions."}

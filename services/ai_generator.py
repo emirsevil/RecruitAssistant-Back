@@ -208,25 +208,11 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
     return content
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, language: str = "en") -> Generator[str, None, None]:
-    """Stream OpenAI generated CV LaTeX using a generator."""
-    logger.info("Streaming CV LaTeX via OpenAI (%s) in language: %s", MODEL, language)
-    
-    lang_instruction = f"Output Language: {language.upper()}. Ensure all generated content (summary, experience descriptions, etc.) is strictly in {language.upper()}."
-=======
-=======
->>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
 def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
     """Stream AI-generated CV LaTeX using a generator."""
     client = get_ai_client()
     model = get_model_name(tier="default")
     logger.info("Streaming CV LaTeX via %s", model)
-<<<<<<< HEAD
->>>>>>> main
-=======
->>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
 
     response = client.chat.completions.create(
         model=model,
@@ -244,23 +230,11 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str, spec
             yield delta
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, language: str = "en") -> Generator[str, None, None]:
-    """Stream OpenAI generated Cover Letter LaTeX using a generator."""
-    logger.info("Streaming Cover Letter LaTeX via OpenAI (%s) in language: %s", MODEL, language)
-=======
-=======
->>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
 def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
     """Stream AI-generated Cover Letter LaTeX using a generator."""
     client = get_ai_client()
     model = get_model_name(tier="default")
     logger.info("Streaming Cover Letter LaTeX via %s", model)
-<<<<<<< HEAD
->>>>>>> main
-=======
->>>>>>> 2d87720d6b34db803ce588b1ac46da4384722c3c
     company_name = _extract_company_name(job_description)
     company_instruction = (
         f"=== TARGET COMPANY NAME ===\n{company_name}\nUse this exact company name in the recipient header."
