@@ -29,9 +29,9 @@ load_dotenv()
 
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
 if not CARTESIA_API_KEY:
-    print("⚠️ [WARNING] CARTESIA_API_KEY is missing in .env file! TTS will not work.")
+    print("[WARNING] CARTESIA_API_KEY is missing in .env file! TTS will not work.")
 else:
-    print(f"✅ [INFO] CARTESIA_API_KEY found (length: {len(CARTESIA_API_KEY)})")
+    print(f"[INFO] CARTESIA_API_KEY found (length: {len(CARTESIA_API_KEY)})")
 CARTESIA_STT_URL = "wss://api.cartesia.ai/stt/websocket"
 CARTESIA_TTS_URL = "wss://api.cartesia.ai/tts/websocket"
 CARTESIA_VERSION = "2025-04-16"
