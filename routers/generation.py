@@ -51,7 +51,7 @@ def api_generate_cv(
             candidate_profile=request.candidate_profile.model_dump(),
             job_description=request.job_description,
             special_instructions=request.special_instructions,
-            language=request.language or "en"
+            output_language=request.output_language,
         ),
         media_type="text/event-stream"
     )
@@ -74,7 +74,7 @@ def api_generate_cover_letter(
             candidate_profile=request.candidate_profile.model_dump(),
             job_description=request.job_description,
             special_instructions=request.special_instructions,
-            language=request.language or "en"
+            output_language=request.output_language,
         ),
         media_type="text/event-stream"
     )
