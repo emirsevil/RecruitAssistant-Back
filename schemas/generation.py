@@ -93,6 +93,10 @@ class GenerateCVRequest(BaseModel):
         None,
         description="Custom instructions for AI generation",
     )
+    output_language: str = Field(
+        "English",
+        description="Language to use for the generated CV content, e.g. English or Turkish",
+    )
 
 
 class GenerateCoverLetterRequest(BaseModel):
@@ -108,6 +112,10 @@ class GenerateCoverLetterRequest(BaseModel):
     special_instructions: Optional[str] = Field(
         None,
         description="Custom instructions for AI generation",
+    )
+    output_language: str = Field(
+        "English",
+        description="Language to use for the generated cover letter content, e.g. English or Turkish",
     )
 
 

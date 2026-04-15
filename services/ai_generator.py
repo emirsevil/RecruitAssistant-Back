@@ -78,7 +78,7 @@ Your task is to generate a polished, accurate, targeted, one-page resume in LaTe
   \pagestyle{empty}
   \setlength{\parindent}{0pt}
   \setlist[itemize]{leftmargin=1.2em, itemsep=1pt, topsep=2pt, parsep=0pt}
-- The document body must be written with simple LaTeX primitives only: \begin{center}, \textbf{}, \textit{}, \hfill, \section*{}, \hrule, \begin{itemize}.
+- The document body must be written with simple LaTeX primitives only: \begin{center}, \textbf{}, \textit{}, \hfill, \section*{}, \vspace{}, \hrule, \begin{itemize}.
 - Contact Info: Do NOT use custom commands like `\email{}`. Use standard text.
 - Header:
   1. Full name centered, uppercase, large, bold.
@@ -87,8 +87,12 @@ Your task is to generate a polished, accurate, targeted, one-page resume in LaTe
   4. Include LinkedIn and GitHub/portfolio only when provided in the JSON profile.
 - Section Headings:
   1. Left-aligned, bold, uppercase.
-  2. Immediately followed by a solid black horizontal rule.
-  3. Use compact spacing before and after each section.
+  2. The solid black horizontal rule must feel attached to the heading, not the body content.
+  3. Use this exact pattern for every section heading:
+     \section*{SECTION NAME}\vspace{-0.65em}
+     \hrule
+     \vspace{0.45em}
+  4. Do not place body text immediately after \hrule without the larger post-rule gap.
 - Education and Experience Item Structure:
   1. Line 1: left side organization/company in bold; right side location in normal text using \hfill.
   2. Line 2: left side degree/job title in italics; right side dates in normal text using \hfill.
@@ -147,16 +151,17 @@ Your task is to write a concise, credible, role-targeted cover letter in LaTeX t
    ]
    \usepackage[english, turkish]{babel}
    \usepackage{parskip}
+   \usepackage[hidelinks]{hyperref}
 3. **Geometry:** `\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}`.
 6. **Header:** Match the professional header style of the CV (Name, Email, etc.).
 7. **Structure:** Include the exact date provided in the user's custom instructions, recipient info, salutation, body paragraphs, professional closing, and candidate name.
-8. **Recipient Info:** Use only two recipient lines: `Hiring Manager` and the actual target company name. Do not include a company address, address placeholder, street, city/state/ZIP placeholder, or `[Company Address]`.
+8. **Recipient Info:** Use only two recipient lines: the localized hiring-manager label and the actual target company name. Do not include a company address, address placeholder, street, city/state/ZIP placeholder, or `[Company Address]`.
 
 ### STRICT OUTPUT RULES
 - NO MARKDOWN: Start exactly with `\documentclass` and end with `\end{document}`. No backticks.
 - DATE RULE: Never output `[Date]`. Use the exact formatted date supplied in the user's custom instructions, for example `April 12, 2026`.
 - COMPANY NAME RULE: You MUST extract the name of the company from the Target Job Description. NEVER output generic placeholders like `[Company Name]` or `Company Name`. Insert the actual target company's name in the recipient header. If the company cannot be identified, omit the company-name line entirely instead of using a placeholder.
-- COMPANY ADDRESS RULE: Never output `[Company Address]` and never render any containing line/element for company address. The recipient block must contain only `Hiring Manager` and the actual company name if known.
+- COMPANY ADDRESS RULE: Never output `[Company Address]` and never render any containing line/element for company address. The recipient block must contain only the localized hiring-manager label and the actual company name if known.
 - ZERO PLACEHOLDER RULE: The final letter must be ready to submit. Never output bracket placeholders or generic template words such as `[Recipient]`, `[Hiring Manager]`, `[Company Name]`, `[Company Address]`, `[Date]`, or `Company Name`.
 - BRACKET SAFETY: NEVER use `\\` followed immediately by a bracket `[` on the next line. This causes compilation errors. Use `\\[0pt]` or simply start a new paragraph.
 - ESCAPE CHARACTERS: Ensure `# $ % & _ { } ~ ^ \` are escaped.
@@ -166,6 +171,58 @@ Your task is to write a concise, credible, role-targeted cover letter in LaTeX t
 # ══════════════════════════════════════════════
 #  LLM GENERATION (STREAMING)
 # ══════════════════════════════════════════════
+
+def _normalise_output_language(output_language: Optional[str]) -> str:
+    """Map UI/API language labels to the language names used in prompts."""
+    language = (output_language or "English").strip().lower()
+    if language in {"tr", "turkish", "turkce", "türkçe"} or language.startswith(("turk", "türk")):
+        return "Turkish"
+    return "English"
+
+
+def _build_output_language_instruction(output_language: Optional[str], document_type: str) -> str:
+    """Create explicit language instructions for user-facing generated content."""
+    language = _normalise_output_language(output_language)
+    babel_language = "turkish" if language == "Turkish" else "english"
+    document_name = "cover letter" if document_type == "cover_letter" else "CV"
+
+    common_rules = [
+        f"Requested output language: {language}.",
+        f"Write every user-facing part of the {document_name} in {language}.",
+        "Do not translate names, company names, product names, URLs, email addresses, or programming/technology terms unless there is a standard localized form.",
+        f"Add \\selectlanguage{{{babel_language}}} immediately after \\begin{{document}} so the LaTeX document uses the requested language.",
+        "Keep LaTeX commands, package names, and environments in valid LaTeX syntax.",
+    ]
+
+    if language == "Turkish":
+        if document_type == "cover_letter":
+            language_rules = [
+                "Use natural professional Turkish throughout the letter.",
+                "Use `İşe Alım Yetkilisi` as the recipient/hiring-manager label. Never output `Hiring Manager` in Turkish output.",
+                "Use Turkish greeting and closing text, for example `Sayın İşe Alım Yetkilisi,` and `Saygılarımla,` unless a more specific recipient is provided.",
+                "Localize every address, location, recipient, salutation, and closing label into Turkish. Omit unknown address lines instead of using English labels or placeholders.",
+                "Use the exact date supplied in the user's custom instructions; if it is supplied in Turkish, keep it in Turkish.",
+            ]
+        else:
+            language_rules = [
+                "Use Turkish section headings where those sections appear: ÖZET, YETENEKLER, DENEYİM, PROJELER, EĞİTİM.",
+                "Use natural Turkish for summaries, bullets, dates, and section content while preserving factual details from the profile.",
+            ]
+    else:
+        if document_type == "cover_letter":
+            language_rules = [
+                "Use natural professional English throughout the letter.",
+                "Use `Hiring Manager` as the recipient/hiring-manager label.",
+                "Use English greeting and closing text, for example `Dear Hiring Manager,` and `Sincerely,` unless a more specific recipient is provided.",
+            ]
+        else:
+            language_rules = [
+                "Use English section headings where those sections appear: SUMMARY, SKILLS, EXPERIENCE, PROJECTS, EDUCATION.",
+                "Use natural English for summaries, bullets, dates, and section content while preserving factual details from the profile.",
+            ]
+
+    return "=== OUTPUT LANGUAGE (ABSOLUTE PRIORITY) ===\n" + "\n".join(common_rules + language_rules)
+
 
 def _build_user_message(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None, prioritize: bool = False) -> str:
     """Format the user data into a structured prompt for the LLM."""
@@ -221,6 +278,7 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
 
     placeholder_line_patterns = [
         r"\[Company Address\]",
+        r"\bCompany Address\b",
         r"\[Date\]",
         r"\[Recipient(?: Name)?\]",
         r"\[Hiring Manager\]",
@@ -229,6 +287,30 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
         content = re.sub(rf"(?m)^.*{placeholder}.*(?:\n|$)", "", content)
 
     content = re.sub(r"\n{3,}", "\n\n", content)
+    return content
+
+
+def _localize_cover_letter_static_text(latex_content: str, output_language: Optional[str]) -> str:
+    """Localize common static labels that the model may leave in English."""
+    if _normalise_output_language(output_language) != "Turkish":
+        return latex_content
+
+    content = latex_content
+    replacements = {
+        r"\bDear Hiring Manager\b": "Sayın İşe Alım Yetkilisi",
+        r"\bHiring Manager\b": "İşe Alım Yetkilisi",
+        r"\bSincerely\b": "Saygılarımla",
+        r"\bBest regards\b": "Saygılarımla",
+        r"\bKind regards\b": "Saygılarımla",
+        r"\bCompany Address\b": "Şirket Adresi",
+        r"\bAddress\b": "Adres",
+        r"\bLocation\b": "Konum",
+        r"\bTurkey\b": "Türkiye",
+        r"\bIstanbul\b": "İstanbul",
+    }
+    for pattern, replacement in replacements.items():
+        content = re.sub(pattern, replacement, content)
+
     return content
 
 
@@ -258,18 +340,43 @@ def _sanitize_cover_letter_latex(latex_content: str) -> str:
     return content.strip()
 
 
-def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
+def _normalize_resume_section_dividers(latex_content: str) -> str:
+    """Keep resume divider rules visually attached to their section headings."""
+    section_heading_pattern = re.compile(
+        r"(\\section\*\{[^{}]+\})\s*"
+        r"(?:\\vspace\{[^{}]+\}\s*)?"
+        r"\\hrule\s*"
+        r"(?:\\vspace\{[^{}]+\}\s*)?"
+    )
+    return section_heading_pattern.sub(
+        lambda match: f"{match.group(1)}\\vspace{{-0.65em}}\n\\hrule\n\\vspace{{0.45em}}\n",
+        latex_content,
+    )
+
+
+def generate_cv_latex_stream(
+    candidate_profile: dict,
+    job_description: str,
+    special_instructions: Optional[str] = None,
+    output_language: Optional[str] = None,
+) -> Generator[str, None, None]:
     """Stream AI-generated CV LaTeX using a generator."""
     client = get_ai_client()
     model = get_model_name(tier="default")
     logger.info("Streaming CV LaTeX via %s", model)
+    generation_instructions = "\n\n".join(
+        part for part in [
+            special_instructions,
+            _build_output_language_instruction(output_language, "cv"),
+        ] if part
+    )
 
     response = client.chat.completions.create(
         model=model,
         temperature=0.3,
         messages=[
             {"role": "system", "content": CV_SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_message(candidate_profile, job_description, special_instructions, prioritize=True)},
+            {"role": "user", "content": _build_user_message(candidate_profile, job_description, generation_instructions, prioritize=True)},
         ],
         stream=True,
     )
@@ -280,7 +387,12 @@ def generate_cv_latex_stream(candidate_profile: dict, job_description: str, spec
             yield delta
 
 
-def generate_cover_letter_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
+def generate_cover_letter_latex_stream(
+    candidate_profile: dict,
+    job_description: str,
+    special_instructions: Optional[str] = None,
+    output_language: Optional[str] = None,
+) -> Generator[str, None, None]:
     """Stream AI-generated Cover Letter LaTeX using a generator."""
     client = get_ai_client()
     model = get_model_name(tier="default")
@@ -292,7 +404,11 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
         else "=== TARGET COMPANY NAME ===\nUNKNOWN\nOmit the company-name line in the recipient header. Never output Company Name."
     )
     cover_letter_instructions = "\n\n".join(
-        part for part in [company_instruction, special_instructions] if part
+        part for part in [
+            company_instruction,
+            special_instructions,
+            _build_output_language_instruction(output_language, "cover_letter"),
+        ] if part
     )
 
     response = client.chat.completions.create(
@@ -300,7 +416,7 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
         temperature=0.5,
         messages=[
             {"role": "system", "content": COVER_LETTER_SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_message(candidate_profile, job_description, cover_letter_instructions)},
+            {"role": "user", "content": _build_user_message(candidate_profile, job_description, cover_letter_instructions, prioritize=True)},
         ],
         stream=True,
     )
@@ -312,6 +428,7 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
             generated_latex += delta
 
     sanitized_latex = _strip_cover_letter_placeholders(generated_latex, company_name)
+    sanitized_latex = _localize_cover_letter_static_text(sanitized_latex, output_language)
     sanitized_latex = _sanitize_cover_letter_latex(sanitized_latex)
     yield sanitized_latex
 
@@ -335,6 +452,66 @@ def _find_tectonic() -> Optional[str]:
     return shutil.which("tectonic")
 
 
+def _latex_uses_package(content: str, package_name: str) -> bool:
+    return re.search(rf"\\usepackage(?:\[[^\]]*\])?\{{{re.escape(package_name)}\}}", content) is not None
+
+
+def _ensure_latex_package(content: str, package_name: str) -> str:
+    if _latex_uses_package(content, package_name):
+        return content
+
+    begin_document = r"\begin{document}"
+    if begin_document not in content:
+        return content
+
+    return content.replace(begin_document, f"\\usepackage{{{package_name}}}\n{begin_document}", 1)
+
+
+def _prepare_latex_for_compilation(latex_content: str) -> str:
+    """Extract and clean model-generated LaTeX before handing it to Tectonic."""
+    match = re.search(r"(\\documentclass.*\\end\{document\})", latex_content, re.DOTALL)
+    if match:
+        content = match.group(1).strip()
+    else:
+        content = latex_content.strip()
+        if content.startswith("```"):
+            first_newline = content.find("\n")
+            if first_newline != -1:
+                content = content[first_newline:].strip()
+            if content.endswith("```"):
+                content = content[:-3].strip()
+
+    # Escape common unescaped special characters from prose and links.
+    content = re.sub(r"(?<!\\)_", r"\_", content)
+    content = re.sub(r"(?<!\\)&", r"\&", content)
+    content = re.sub(r"(?<!\\)%", r"\%", content)
+
+    # Preserve the value of hallucinated contact commands instead of leaving
+    # behind unbalanced braces.
+    content = re.sub(
+        r"\\(?:email|phone|linkedin|location|github|address)\{([^{}]*)\}",
+        r"\1",
+        content,
+    )
+    content = re.sub(r"\\(?:email|phone|linkedin|location|github|address)\{?", " ", content)
+
+    # Models sometimes emit the wrong capitalization for ragged2e's command.
+    content = content.replace(r"\Justifying", r"\justifying")
+    if r"\justifying" in content:
+        content = _ensure_latex_package(content, "ragged2e")
+    if re.search(r"\\(?:href|url)\{", content):
+        content = _ensure_latex_package(content, "hyperref")
+
+    # Fix potential "Missing number" issues in common spacing commands.
+    content = re.sub(r"\\vspace\{[a-zA-Z\s]+\}", r"\\vspace{1em}", content)
+
+    # Brackets after \\ are interpreted as optional spacing arguments.
+    content = re.sub(r"\\\\\s*\n\s*\[", r"\\\\[0pt]\n[", content)
+    content = _normalize_resume_section_dividers(content)
+
+    return content
+
+
 def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
     """
     Compile a LaTeX string to PDF using Tectonic.
@@ -356,41 +533,7 @@ def compile_latex_to_pdf(latex_content: str) -> Optional[str]:
     tex_path = os.path.join(tmp_dir, tex_filename)
     pdf_path = tex_path.replace(".tex", ".pdf")
 
-    # Robust Extraction: Use regex to capture strictly between \documentclass and \end{document}
-    import re
-    match = re.search(r"(\\documentclass.*\\end\{document\})", latex_content, re.DOTALL)
-    if match:
-        content = match.group(1).strip()
-    else:
-        # Fallback to stripping markdown fences if regex fails
-        content = latex_content.strip()
-        if content.startswith("```"):
-            first_newline = content.find("\n")
-            if first_newline != -1:
-                content = content[first_newline:].strip()
-            if content.endswith("```"):
-                content = content[:-3].strip()
-
-    # Character Scrubber: Escape problematic characters that often fail compilation
-    # 1. Escape basic characters if not already escaped
-    content = re.sub(r"(?<!\\)_", r"\_", content)
-    content = re.sub(r"(?<!\\)&", r"\&", content)
-    content = re.sub(r"(?<!\\)%", r"\%", content)
-    
-    # 2. Strip common hallucinated commands that cause "Undefined control sequence"
-    content = re.sub(r"\\email\{", r" ", content)
-    content = re.sub(r"\\phone\{", r" ", content)
-    content = re.sub(r"\\linkedin\{", r" ", content)
-    content = re.sub(r"\\location\{", r" ", content)
-    content = re.sub(r"\\github\{", r" ", content)
-    content = re.sub(r"\\address\{", r" ", content)
-    
-    # 3. Fix potential "Missing number" issues in common spacing commands
-    content = re.sub(r"\\vspace\{[a-zA-Z\s]+\}", r"\\vspace{1em}", content)
-    
-    # 4. FIX: Brackets after \\ are misinterpreted as spacing arguments
-    # (e.g. \\ \n [Date] -> LaTeX thinks [Date] is a dimension)
-    content = re.sub(r"\\\\\s*\n\s*\[", r"\\\\[0pt]\n[", content)
+    content = _prepare_latex_for_compilation(latex_content)
     
     try:
         with open(tex_path, "w", encoding="utf-8") as f:
