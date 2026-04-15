@@ -370,8 +370,6 @@ def generate_cv_latex_stream(
             _build_output_language_instruction(output_language, "cv"),
         ] if part
     )
-
-    lang_instruction = f"Output Language: {language.upper()}. Ensure the entire CV is written strictly in {language.upper()}."
     
     response = client.chat.completions.create(
         model=model,
@@ -405,8 +403,6 @@ def generate_cover_letter_latex_stream(
         if company_name
         else "=== TARGET COMPANY NAME ===\nUNKNOWN\nOmit the company-name line in the recipient header. Never output Company Name."
     )
-    
-    lang_instruction = f"Output Language: {language.upper()}. Ensure the entire cover letter is written strictly in {language.upper()}."
     
     cover_letter_instructions = "\n\n".join(
         part for part in [
