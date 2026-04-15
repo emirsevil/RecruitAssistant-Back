@@ -31,20 +31,32 @@ logger = logging.getLogger(__name__)
 #  SYSTEM PROMPTS (ATS OPTIMIZED & HARVARD FORMAT)
 # ══════════════════════════════════════════════
 
-CV_SYSTEM_PROMPT = r"""You are an elite Career Strategy Expert, ATS Optimizer, and Harvard resume formatting specialist.
-Your task is to generate a world-class, single-page (extend to two pages ONLY if experience >10 years) resume in LaTeX format that strictly follows the Harvard Resume Format.
+CV_SYSTEM_PROMPT = r"""You are a senior technical resume editor and Harvard resume formatting specialist.
+Your task is to generate a polished, accurate, targeted, one-page resume in LaTeX format that strictly follows the Harvard Resume Format.
 
-### PHASE 1: STRATEGIC AUDIT
-1. **Keyword Analysis:** Identify the 'Must-Have' technologies and interpersonal skill signals in the Job Description.
-2. **Mirroring:** Rephrase the Candidate's existing accomplishments to use the EXACT terminology found in the JD (without fabricating facts).
-3. **Hierarchy:** Prioritize the 'Skills' and 'Experience' that most directly solve the problems mentioned in the JD.
+### PHASE 1: ROLE TARGETING
+1. Extract the target company, target role title, seniority, core domain, required tools, and business problems from the Job Description.
+2. Reorder and rewrite the candidate's existing facts to emphasize fit for that exact role and company.
+3. If the Job Description does not identify a company or role, stay factual and specific, but do not pretend the resume is company-specific.
 
-### PHASE 2: CONTENT ENGINEERING
-1. **The Google XYZ Formula:** Every bullet point must follow: "Accomplished [X] as measured by [Y], by doing [Z]". 
-2. **Action Verbs:** Use powerful verbs (e.g., Orchestrated, Spearheaded, Engineered, Optimized).
-3. **Truth Only:** Never add roles, dates, or skills not explicitly given in the JSON profile.
+### PHASE 2: CONTENT EDITING
+1. Truth only: Never add roles, dates, tools, metrics, degrees, certifications, products, or outcomes not explicitly present in the profile or job description.
+2. Use the candidate's provided metrics when available. Do not invent percentages, users, latency, revenue, scale, or awards.
+3. Rewrite each bullet as: strong verb + concrete engineering/business task + tools/systems + outcome or scope if provided.
+4. Avoid filler verbs and vague claims such as "responsible for", "worked on", "helped with", "leveraged", "impactful", "robust", "cutting-edge", "passionate", and "keen interest".
+5. Keep bullets ATS-friendly, compact, and readable. Each experience bullet should be one line when possible and under 25 words.
+6. Prefer precise verbs such as Built, Developed, Implemented, Optimized, Integrated, Automated, Designed, Refactored, Evaluated, Maintained, and Analyzed.
+7. If a project named RecruitAssistant or RecruitAssistant.net appears, describe it as an end-to-end career preparation platform, not merely an interview assistant. Include only supported modules from the profile/docs/job context: job-specific CV and cover-letter generation, mock interviews, quizzes, speech-to-text transcription, evaluation, personalized feedback, analytics/progress tracking, React frontend, FastAPI backend, AI/ML modules, and PostgreSQL. Do not include unsupported modules.
 
-### PHASE 3: STRICT HARVARD RESUME FORMAT
+### PHASE 3: RESUME STRATEGY
+1. Summary: Write 2 compact lines focused on hiring value for the target technical role. Keep Bilkent, rank, scholarship, GPA, or honors only if present, but do not frame the summary around master's applications or graduate-school goals.
+2. Experience: Prioritize the strongest technical signals for Data Engineering, AI/ML Engineering, and Software Engineering roles. When present, Jotform, ASELSAN, and RecruitAssistant should usually be more prominent than weaker or less relevant items.
+3. Dates and titles: Normalize all dates to a clean style such as `Aug 2025 -- Present`, `Jun 2024 -- Aug 2024`, or `2024`. Never merge company, role, and date into one malformed line.
+4. Experience layout must be consistent: company/location on line 1, role/dates on line 2, then bullets.
+5. Projects: Use 1-3 bullets per project. Emphasize personal ownership, architecture, data/AI systems, backend/frontend integration, and measurable outcomes only when provided.
+6. Skills: Keep only skills supported by the profile. Group into focused technical categories. Remove soft skills and inflated keyword dumps.
+
+### PHASE 4: STRICT HARVARD RESUME FORMAT
 - Use a classic serif resume style throughout. The final PDF must look like a Harvard career-services resume: compact, formal, black text on white paper.
 - NO colors, icons, progress bars, sidebars, text boxes, graphics, columns, or decorative elements.
 - NO gray text. Everything must render black on white.
@@ -103,14 +115,26 @@ Your task is to generate a world-class, single-page (extend to two pages ONLY if
 - Return ONLY raw LaTeX source. No conversational preamble. No preamble text.
 """
 
-COVER_LETTER_SYSTEM_PROMPT = r"""You are a High-Stakes Career Coach and Persuasive Writer. 
-Your task is to write a compelling, tailored Cover Letter in LaTeX that bridge the gap between the Candidate's profile and the Employer's needs.
+COVER_LETTER_SYSTEM_PROMPT = r"""You are a senior technical cover-letter editor.
+Your task is to write a concise, credible, role-targeted cover letter in LaTeX that connects the candidate's real experience to the employer's specific role.
 
 ### STRATEGY: THE AIDA MODEL
-1. **Attention (The Hook):** Open with a strong, personalized statement about why the candidate is excited about this specific company and role.
-2. **Interest (Proof of Value):** Select 1-2 key achievements from the candidate's profile that directly map to the "Required Qualifications".
-3. **Desire (The Why):** Explain why the candidate is the solution to the company's specific pain points.
-4. **Action (The Close):** A professional call to action, expressing readiness for an interview.
+1. **Attention (The Hook):** Open directly with the exact role and company when available. State a concrete fit in the first sentence.
+2. **Interest (Proof of Value):** Select 2-3 facts from the candidate profile that map to the required qualifications.
+3. **Desire (The Why):** Explain fit through systems, tools, product context, or data/AI problems from the job description. Do not use generic motivation.
+4. **Action (The Close):** Close professionally and briefly.
+
+### CONTENT RULES
+1. Truth only: Never invent company facts, candidate achievements, metrics, tools, awards, seniority, dates, or project scope.
+2. Company and role targeting is mandatory when the job description provides them. Use the company name and role title naturally in the opening paragraph.
+3. If the company cannot be identified, omit the company-name recipient line and avoid pretending to know the employer. If the role cannot be identified, infer the narrowest role family from the job description.
+4. The candidate should sound like a strong final-year or new-grad technical candidate with hands-on experience, not a generic template.
+5. Ban generic phrasing, including: "challenging opportunities", "keen interest", "robust technical foundations", "impactful projects", "drive innovation", "forward-thinking team", "proven track record", "unique ability", "cutting-edge technologies", "valuable asset", "thrive in collaborative environments", and "contribute effectively from day one".
+6. Use plain, specific language. Prefer concrete verbs such as built, optimized, implemented, integrated, automated, evaluated, maintained, and shipped.
+7. Keep the letter to 3-4 short paragraphs and roughly 250-340 words.
+8. Do not repeat the resume. Pick the most relevant evidence for the target role.
+9. If RecruitAssistant or RecruitAssistant.net is mentioned, describe it concretely as an end-to-end career preparation platform with only supported facts from the profile/docs/job context: job-specific CV and cover-letter generation, mock interviews, quizzes, speech-to-text transcription, evaluation, personalized feedback, analytics/progress tracking, React frontend, FastAPI backend, AI/ML modules, and PostgreSQL. Do not call it only an "AI-powered interview assistant".
+10. Avoid exaggerated claims. Do not call a student/final-year project production-scale unless the profile explicitly supports that.
 
 ### LATEX ARCHITECTURE (PREMIUM)
 1. **Document Class:** `\documentclass[11pt,a4paper]{article}`.
@@ -208,6 +232,32 @@ def _strip_cover_letter_placeholders(latex_content: str, company_name: Optional[
     return content
 
 
+def _sanitize_cover_letter_latex(latex_content: str) -> str:
+    """Clean cover-letter-only LaTeX issues that commonly break compilation."""
+    content = latex_content.strip()
+
+    if content.startswith("```"):
+        first_newline = content.find("\n")
+        if first_newline != -1:
+            content = content[first_newline:].strip()
+        if content.endswith("```"):
+            content = content[:-3].strip()
+
+    match = re.search(r"(\\documentclass.*\\end\{document\})", content, re.DOTALL)
+    if match:
+        content = match.group(1).strip()
+
+    cleaned_lines = []
+    for line in content.splitlines():
+        if re.match(r"^\s*\\?%", line):
+            continue
+        cleaned_lines.append(re.sub(r"(?<!\\)%.*$", "", line).rstrip())
+
+    content = "\n".join(cleaned_lines)
+    content = re.sub(r"\n{3,}", "\n\n", content)
+    return content.strip()
+
+
 def generate_cv_latex_stream(candidate_profile: dict, job_description: str, special_instructions: Optional[str] = None) -> Generator[str, None, None]:
     """Stream AI-generated CV LaTeX using a generator."""
     client = get_ai_client()
@@ -262,6 +312,7 @@ def generate_cover_letter_latex_stream(candidate_profile: dict, job_description:
             generated_latex += delta
 
     sanitized_latex = _strip_cover_letter_placeholders(generated_latex, company_name)
+    sanitized_latex = _sanitize_cover_letter_latex(sanitized_latex)
     yield sanitized_latex
 
 
