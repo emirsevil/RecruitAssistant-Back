@@ -12,6 +12,7 @@ from schemas.dashboard import (
     DashboardUpcomingEventResponse,
     SkillScoreResponse,
     WeeklyGoalsResponse,
+    WeeklyGoalUpdate,
 )
 
 
@@ -107,7 +108,7 @@ def _build_derived_activity(db: Session, user_id: int, limit: int) -> list[Activ
     for score in quiz_scores:
         activities.append(ActivityLogResponse(
             id=f"quiz-score-{score.id}",
-            title=f"Completed {score.quiz_title} Quiz",
+            title=f"Completed {score.quiz.title if score.quiz else 'Unknown'} Quiz",
             description=f"{score.correct_answers}/{score.total_questions} correct - {score.score}%",
             activity_type="quiz",
             created_at=score.completed_at,
@@ -154,12 +155,13 @@ def _get_skill_scores(db: Session, user_id: int) -> list[SkillScoreResponse]:
 
     quiz_groups = (
         db.query(
-            models.QuizScore.quiz_title,
+            models.Quiz.title.label("quiz_title"),
             func.avg(models.QuizScore.score).label("avg_score"),
             func.max(models.QuizScore.completed_at).label("updated_at"),
         )
+        .join(models.Quiz, models.QuizScore.quiz_id == models.Quiz.id)
         .filter(models.QuizScore.user_id == user_id)
-        .group_by(models.QuizScore.quiz_title)
+        .group_by(models.Quiz.title)
         .order_by(func.avg(models.QuizScore.score).asc())
         .limit(4)
         .all()
@@ -297,3 +299,35 @@ def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
             for event in upcoming_events
         ],
     )
+
+
+def update_or_create_weekly_goal(db: Session, user_id: int, goals: WeeklyGoalUpdate) -> models.WeeklyGoal:
+    now = datetime.now(timezone.utc)
+    week_start = _start_of_week(now).date()
+
+    db_goal = (
+        db.query(models.WeeklyGoal)
+        .filter(
+            models.WeeklyGoal.user_id == user_id,
+            models.WeeklyGoal.week_start == week_start,
+        )
+        .first()
+    )
+
+    if db_goal:
+        db_goal.interviews_target = goals.interviews_target
+        db_goal.quizzes_target = goals.quizzes_target
+        db_goal.practice_minutes_target = goals.practice_minutes_target
+    else:
+        db_goal = models.WeeklyGoal(
+            user_id=user_id,
+            week_start=week_start,
+            interviews_target=goals.interviews_target,
+            quizzes_target=goals.quizzes_target,
+            practice_minutes_target=goals.practice_minutes_target,
+        )
+        db.add(db_goal)
+
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal

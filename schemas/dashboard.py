@@ -39,6 +39,12 @@ class WeeklyGoalsResponse(BaseModel):
     practice_minutes_actual: int
 
 
+class WeeklyGoalUpdate(BaseModel):
+    interviews_target: int
+    quizzes_target: int
+    practice_minutes_target: int
+
+
 class DashboardUpcomingEventResponse(BaseModel):
     id: int
     title: str

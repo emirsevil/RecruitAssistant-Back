@@ -6,7 +6,7 @@ from utils.ai_client import get_ai_client, get_model_name
 
 logger = logging.getLogger(__name__)
 
-def extract_skills_from_job_description(job_desc: str) -> List[str]:
+async def extract_skills_from_job_description(job_desc: str) -> List[str]:
     """
     Analyzes the JD and returns a list of distinct technical skills/topics.
     """
@@ -15,6 +15,7 @@ def extract_skills_from_job_description(job_desc: str) -> List[str]:
 
     prompt = f"""
     Analyze the following Job Description and extract the top 10 most important technical skills, programming languages, tools, or frameworks mentioned.
+    MANDATORY: Keep the skill names in their original language as found in the Job Description or their standard technical form (e.g., 'Software Development Life Cycle'). DO NOT translate technical terms into another language.
     Return ONLY a JSON list of strings. No markdown formatting.
     
     Job Description:
@@ -22,102 +23,144 @@ def extract_skills_from_job_description(job_desc: str) -> List[str]:
     """
 
     try:
-        client = get_ai_client()
+        from utils.ai_client import get_async_ai_client
+        client = get_async_ai_client()
         model = get_model_name(tier="default")
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
+        import re
         content = response.choices[0].message.content.strip()
         
-        # Cleanup potential markdown
-        if "```json" in content:
-            content = content.split("```json")[-1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[-1].split("```")[0].strip()
+        # Robust JSON extraction
+        match = re.search(r'(\[.*\])', content, re.DOTALL)
+        if match:
+            clean_content = match.group(1).strip()
+        else:
+            # Fallback to simple cleaning
+            clean_content = content
+            if "```json" in clean_content:
+                clean_content = clean_content.split("```json")[-1].split("```")[0].strip()
+            elif "```" in clean_content:
+                clean_content = clean_content.split("```")[-1].split("```")[0].strip()
             
-        skills = json.loads(content)
+        skills = json.loads(clean_content, strict=False)
         return skills if isinstance(skills, list) else []
     except Exception as e:
         logger.error(f"Error extracting skills: {e}")
         return []
 
-def generate_targeted_quizzes(job_desc: str, selections: List[Dict]) -> List[Dict]:
+async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], language: str = "tr") -> List[Dict]:
     """
-    Generates quizzes for specific skills and difficulties.
+    Generates quizzes for specific skills and difficulties in parallel.
     'selections' is a list of { "title": "SkillName", "difficulties": ["Easy", "Medium"] }
     """
     if not job_desc or not selections:
         return []
 
-    # Construct a detailed prompt for targeted generation
-    selections_str = json.dumps(selections, indent=2)
+    from utils.ai_client import get_async_ai_client
+    import asyncio
     
-    prompt = f"""
-    You are an expert Technical Interviewer.
-    Generate technical quiz questions based on the Job Description and the specific Skill/Difficulty selections provided below.
+    client = get_async_ai_client()
+    model = get_model_name(tier="default")
     
-    Job Description:
-    {job_desc}
-    
-    Target Selections:
-    {selections_str}
-    
-    Requirements:
-    1. For EACH difficulty selected for a skill, generate exactly 5 to 8 unique questions.
-    2. Each question MUST have 4 options and 1 correct_answer.
-    3. MANDATORY: The output must be a valid JSON array of objects with this structure:
-    [
-      {{
-        "title": "SkillName",
-        "difficulty": "Easy",
-        "questions": [
+    lang_instruction = f"MANDATORY: Generate all quiz content (questions, options, and correct answers) strictly in {language.upper()}."
+    if language.lower() == "tr":
+        lang_instruction += " (Türkçe karakterleri düzgün kullan)."
+
+    async def _generate_single_quiz(skill_name: str, diff: str) -> List[Dict]:
+        """Helper to generate a single quiz group for one skill/difficulty."""
+        logger.info(f"Generating {diff} quiz for {skill_name} in parallel...")
+        
+        prompt = f"""
+        You are an expert Technical Interviewer.
+        Generate technical quiz questions based on the Job Description and the specific Skill/Difficulty provided.
+        
+        {lang_instruction}
+        
+        Job Description:
+        {job_desc}
+        
+        Target Topic: {skill_name}
+        Difficulty: {diff}
+        
+        Requirements:
+        1. Generate exactly 5 to 8 unique questions for this difficulty.
+        2. Each question MUST have 4 options and 1 correct_answer.
+        3. MANDATORY: The "title" field in the JSON MUST be exactly "{skill_name}". DO NOT translate or modify the skill name.
+        4. MANDATORY: The output must be a valid JSON array of objects with this structure:
+        [
           {{
-            "question": "...",
-            "options": ["A", "B", "C", "D"],
-            "correct_answer": "Actual correct option text"
+            "title": "{skill_name}",
+            "difficulty": "{diff}",
+            "questions": [
+              {{
+                "question": "...",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "Actual correct option text"
+              }}
+            ]
           }}
         ]
-      }}
-    ]
-    4. Difficulty Guidelines:
-       - Easy: Basic syntax, terminology.
-       - Medium: Real-world usage, common patterns.
-       - Hard: Optimizations, edge cases, internals.
-       
-    Return ONLY the raw JSON array. No markdown, no conversation.
-    """
-
-    try:
-        client = get_ai_client()
-        model = get_model_name(tier="default")
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-        )
-        content = response.choices[0].message.content.strip()
         
-        if "```json" in content:
-            content = content.split("```json")[-1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[-1].split("```")[0].strip()
+        Return ONLY the raw JSON array. No markdown, no conversation.
+        """
+        
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+            )
+            content = response.choices[0].message.content.strip()
             
-        raw_data = json.loads(content)
-        
-        # Flatten and validate the results to match original QuizCreate format if needed by router
-        # However, the router groups them back, so let's return it structured as requested.
-        # Note: The caller (router) will decide how to iterate and save them.
-        return raw_data if isinstance(raw_data, list) else []
-    except Exception as e:
-        logger.error(f"Error generating targeted quizzes: {e}")
+            # Robust JSON extraction for the specific quiz group
+            import re
+            match = re.search(r'(\[.*\])', content, re.DOTALL)
+            if match:
+                clean_content = match.group(1).strip()
+            else:
+                clean_content = content
+                if "```json" in clean_content:
+                    clean_content = clean_content.split("```json")[-1].split("```")[0].strip()
+                elif "```" in clean_content:
+                    clean_content = clean_content.split("```")[-1].split("```")[0].strip()
+                
+            data = json.loads(clean_content, strict=False)
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.error(f"Error generating single quiz for {skill_name} {diff}: {e}")
+            # Log raw content for debugging on parse failure
+            logger.debug(f"Raw content that failed to parse: {content}")
+            return []
+
+    # Flatten selections into individual (skill, difficulty) tasks
+    tasks = []
+    for sel in selections:
+        skill_name = sel.get("title", "Technical Quiz")
+        diffs = sel.get("difficulties", ["Medium"])
+        for d in diffs:
+            tasks.append(_generate_single_quiz(skill_name, d))
+
+    if not tasks:
         return []
 
-# Keeping the old function for backward compatibility if needed, but updating its model
-def generate_quizzes_from_job_description(job_desc: str) -> List[Dict]:
-    """Legacy function, now using gpt-4o for better quality."""
-    skills = extract_skills_from_job_description(job_desc)
+    # Run all tasks in parallel
+    all_results = await asyncio.gather(*tasks)
+    
+    # Flatten and combine all generated groups
+    final_output = []
+    for result_list in all_results:
+        final_output.extend(result_list)
+        
+    return final_output
+
+
+async def generate_quizzes_from_job_description(job_desc: str, language: str = "tr") -> List[Dict]:
+    """Legacy function, now using async Targeted flow."""
+    skills = await extract_skills_from_job_description(job_desc)
     # Just pick top 3 for auto-generation if this is still used
     subset = [{"title": s, "difficulties": ["Medium"]} for s in skills[:3]]
-    return generate_targeted_quizzes(job_desc, subset)
+    return await generate_targeted_quizzes(job_desc, subset, language=language)
