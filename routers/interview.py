@@ -103,14 +103,17 @@ def get_interview_detail(
         overall_feedback = feedback_data.get("overall_feedback")
         conversation_history = feedback_data.get("conversation_history")
 
-        # Build QA list from qa_pairs, merge evaluation results
-        eval_by_question = {}
-        for r in eval_results:
-            eval_by_question[r.get("question", "")] = r
+        eval_by_question = {r.get("question", ""): r for r in eval_results if r.get("question")}
 
-        for qa in qa_pairs:
+        for i, qa in enumerate(qa_pairs):
             q_text = qa.get("question", "")
-            eval_r = eval_by_question.get(q_text, {})
+            # Try to match by exact question text first, fallback to index
+            eval_r = eval_by_question.get(q_text)
+            if not eval_r and i < len(eval_results):
+                eval_r = eval_results[i]
+            if not eval_r:
+                eval_r = {}
+
             questions_list.append(InterviewDetailQA(
                 question=q_text,
                 topic=qa.get("topic", ""),
@@ -124,25 +127,28 @@ def get_interview_detail(
         qa_pairs = feedback_data.get("qa_pairs", [])
         overall_feedback = feedback_data.get("overall_feedback")
 
-        # Build lookup maps
-        eval_by_question = {}
-        for r in eval_results:
-            eval_by_question[r.get("question", "")] = r
-
-        answer_by_question = {}
-        for qa in qa_pairs:
-            answer_by_question[qa.get("question", "")] = qa.get("answer", "")
+        eval_by_question = {r.get("question", ""): r for r in eval_results if r.get("question")}
+        answer_by_question = {qa.get("question", ""): qa.get("answer", "") for qa in qa_pairs if qa.get("question")}
 
         # Use transcript_data (original questions) as the base
-        for q in transcript_data:
+        for i, q in enumerate(transcript_data):
             q_text = q.get("question", "") if isinstance(q, dict) else ""
             topic = q.get("topic", "") if isinstance(q, dict) else ""
-            eval_r = eval_by_question.get(q_text, {})
-            answer = answer_by_question.get(q_text, "")
+            
+            answer = answer_by_question.get(q_text)
+            if answer is None and i < len(qa_pairs):
+                answer = qa_pairs[i].get("answer", "")
+            
+            eval_r = eval_by_question.get(q_text)
+            if not eval_r and i < len(eval_results):
+                eval_r = eval_results[i]
+            if not eval_r:
+                eval_r = {}
+
             questions_list.append(InterviewDetailQA(
                 question=q_text,
                 topic=topic,
-                answer=answer,
+                answer=answer or "",
                 score=eval_r.get("score"),
                 feedback=eval_r.get("feedback"),
             ))
@@ -184,10 +190,11 @@ def generate_mock_interview(
         raise HTTPException(status_code=400, detail="Workspace does not have a job description")
 
     job_description = workspace.job_description
+    categories_str = ", ".join(request.categories) if request.categories else "Genel"
 
     questions = generate_interview_questions(
         job_description=job_description,
-        categories=request.categories,
+        categories=categories_str,
         difficulty=request.difficulty,
         interview_type=request.interview_type
     )
@@ -202,7 +209,7 @@ def generate_mock_interview(
         interview_type=request.interview_type,
         transcript=transcript,
         difficulty=request.difficulty,
-        categories=request.categories,
+        categories=categories_str,
         mode="text",
         status="in_progress",
     )
@@ -242,7 +249,8 @@ def evaluate_mock_interview(request: EvaluateRequest, db: Session = Depends(get_
     evaluation = evaluate_interview(
         qa_pairs=qa_dicts,
         job_description=job_description,
-        difficulty=request.difficulty
+        difficulty=request.difficulty,
+        interview_type=interview.interview_type or "technical"
     )
 
     if not evaluation.get("results"):

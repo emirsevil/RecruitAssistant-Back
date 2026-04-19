@@ -79,8 +79,7 @@ class VoiceInterviewSession:
         self.conversation_history: list = []  # Full dialogue for GPT context
         self.qa_pairs: list = []  # question/answer pairs for final evaluation
         self.current_candidate_transcript: str = ""
-
-        # Cartesia connections
+        self.current_accumulated_answer: str = ""
         self._tts_ws: Optional[websockets.WebSocketClientProtocol] = None
         self._current_tts_context_id: Optional[str] = None
 
@@ -90,6 +89,8 @@ class VoiceInterviewSession:
 
         # Control flags
         self._is_running = False
+        self._is_wrapping_up = False
+        self._evaluation_done = asyncio.Event()
 
         # Evaluation results (stored for DB persistence)
         self.last_evaluation: dict = {}
@@ -154,6 +155,11 @@ class VoiceInterviewSession:
             await self.send_json({"type": "error", "message": "Ses algılanamadı. Lütfen tekrar deneyin."})
             self.state = "listening"
             return
+            
+        if self.current_accumulated_answer:
+            self.current_accumulated_answer += f"\n\n[Devam Eden Cevap]: {self.current_candidate_transcript}"
+        else:
+            self.current_accumulated_answer = self.current_candidate_transcript
 
         self.state = "processing"
         await self._process_candidate_answer(transcript)
@@ -171,6 +177,7 @@ class VoiceInterviewSession:
         self.current_question_index += 1
         self.follow_up_count = 0
         self.current_candidate_transcript = ""
+        self.current_accumulated_answer = ""
 
         if self.current_question_index < len(self.questions):
             # Move to next question
@@ -189,8 +196,15 @@ class VoiceInterviewSession:
             })
             await self._speak_text(transition_text, question_index=self.current_question_index)
         else:
-            # No more questions — evaluate
-            await self._run_evaluation()
+            # No more questions — speak goodbye then evaluate
+            goodbye_text = "Mülakatımız burada sona erdi. Katılımınız için teşekkür ederim, size en kısa sürede geri dönüş yapacağız. İyi günler!"
+            self.conversation_history.append({
+                "role": "interviewer",
+                "text": goodbye_text,
+                "action": "wrap_up",
+            })
+            self._is_wrapping_up = True
+            await self._speak_text(goodbye_text, question_index=self.current_question_index)
 
     async def handle_interrupt(self):
         """Cancel current TTS playback and switch to listening mode."""
@@ -303,6 +317,7 @@ class VoiceInterviewSession:
             self.current_question_index += 1
             self.follow_up_count = 0
             self.current_candidate_transcript = ""
+            self.current_accumulated_answer = ""
 
             if self.current_question_index < len(self.questions):
                 await self.send_json({
@@ -311,20 +326,20 @@ class VoiceInterviewSession:
                 })
                 await self._speak_text(response_text, question_index=self.current_question_index)
             else:
-                # All questions done — cancel TTS and run evaluation directly
-                # Don't speak wrap-up text to avoid audio leaking into evaluation screen
-                await self._cancel_tts()
-                await self._run_evaluation()
+                # All questions done — speak the goodbye text, then evaluate after TTS finishes
+                self._is_wrapping_up = True
+                await self._speak_text(response_text, question_index=self.current_question_index)
 
         elif action == "follow_up":
             self.follow_up_count += 1
             self.current_candidate_transcript = ""  # Reset for the follow-up answer
+            self.current_accumulated_answer += f"\n\n[Mülakatçı Takip Sorusu]: {response_text.strip()}"
             await self._speak_text(response_text, question_index=self.current_question_index)
 
         elif action == "wrap_up":
             self._save_current_answer()
-            await self._cancel_tts()
-            await self._run_evaluation()
+            self._is_wrapping_up = True
+            await self._speak_text(response_text, question_index=self.current_question_index)
 
     def _save_current_answer(self, passed: bool = False):
         """Save the current question's answer to qa_pairs."""
@@ -333,7 +348,7 @@ class VoiceInterviewSession:
             self.qa_pairs.append({
                 "question": q.get("question", ""),
                 "topic": q.get("topic", ""),
-                "answer": "(Pas geçildi)" if passed else (self.current_candidate_transcript.strip() or "(Cevap verilmedi)"),
+                "answer": "(Pas geçildi)" if passed else (self.current_accumulated_answer.strip() or "(Cevap verilmedi)"),
             })
 
     # ─── Cartesia TTS ────────────────────────────────────────────────
@@ -370,17 +385,24 @@ class VoiceInterviewSession:
                     msg_type = data.get("type", "")
 
                     if msg_type == "chunk":
-                        # Decode base64 audio data and send as binary
-                        audio_b64 = data.get("data", "")
-                        if audio_b64:
-                            audio_bytes = base64.b64decode(audio_b64)
-                            await self.send_binary(audio_bytes)
+                        # Only forward audio from the CURRENT context — drop stale chunks
+                        chunk_context = data.get("context_id", "")
+                        if chunk_context == self._current_tts_context_id:
+                            audio_b64 = data.get("data", "")
+                            if audio_b64:
+                                audio_bytes = base64.b64decode(audio_b64)
+                                await self.send_binary(audio_bytes)
 
                     elif msg_type == "done":
                         context_id = data.get("context_id", "")
                         if context_id == self._current_tts_context_id:
-                            # TTS finished speaking — switch to listening
-                            if self.state == "ai_speaking":
+                            if self._is_wrapping_up:
+                                # All goodbye audio chunks sent — tell frontend
+                                # Frontend will wait for playback to finish, then send start_evaluation
+                                self._is_wrapping_up = False
+                                await self.send_json({"type": "ai_done_speaking", "wrap_up": True})
+                            elif self.state == "ai_speaking":
+                                # Normal question finished — switch to listening
                                 self.state = "listening"
                                 self.current_candidate_transcript = ""
                                 await self.send_json({"type": "ai_done_speaking"})
@@ -475,6 +497,7 @@ class VoiceInterviewSession:
                 qa_pairs=self.qa_pairs,
                 job_description=self.job_description,
                 difficulty=self.difficulty,
+                interview_type=self.interview_type,
             ),
         )
 
@@ -490,3 +513,11 @@ class VoiceInterviewSession:
 
         await self.send_json({"type": "session_complete"})
         self.state = "done"
+        self._evaluation_done.set()
+
+    async def wait_for_evaluation(self, timeout: float = 120):
+        """Wait for evaluation to complete (used by WS handler for DB persistence)."""
+        try:
+            await asyncio.wait_for(self._evaluation_done.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            print("[Session] Evaluation timed out")

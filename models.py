@@ -65,6 +65,18 @@ class Workspace(Base):
     quizzes = relationship("Quiz", back_populates="workspace")
     interviews = relationship("Interview", back_populates="workspace")
     cover_letters = relationship("CoverLetter", back_populates="workspace")
+    categories = relationship("WorkspaceCategory", back_populates="workspace", cascade="all, delete-orphan")
+
+# 3.1. WORKSPACE CATEGORY (Çalışma Alanı Kategorileri)
+class WorkspaceCategory(Base):
+    __tablename__ = "workspace_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    workspace = relationship("Workspace", back_populates="categories")
 
 # 4. COVER LETTER (Niyet Mektupları Tablosu) - YENİ EKLENDİ
 class CoverLetter(Base):

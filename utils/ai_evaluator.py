@@ -2,7 +2,7 @@ import json
 
 from utils.ai_client import get_ai_client, get_model_name
 
-def evaluate_interview(qa_pairs: list, job_description: str, difficulty: str) -> dict:
+def evaluate_interview(qa_pairs: list, job_description: str, difficulty: str, interview_type: str = "technical") -> dict:
     """
     Evaluates all question-answer pairs in a single LLM call.
     Returns per-question scores/feedback and an overall score.
@@ -11,6 +11,22 @@ def evaluate_interview(qa_pairs: list, job_description: str, difficulty: str) ->
     qa_text = ""
     for i, qa in enumerate(qa_pairs):
         qa_text += f"\nSoru {i+1} (Konu: {qa['topic']}): {qa['question']}\nAdayın Cevabı: {qa['answer']}\n"
+
+    if interview_type == "hr":
+        evaluation_criteria = """
+Değerlendirme kriterleri (İK / Davranışsal Mülakat):
+- İletişim becerisi: Aday düşüncelerini açık, net ve yapılandırılmış şekilde ifade edebiliyor mu?
+- STAR yöntemi: Aday somut durum, görev, aksiyon ve sonuç belirtiyor mu yoksa genel ve soyut mu kalıyor?
+- Öz farkındalık: Aday güçlü ve zayıf yönlerini gerçekçi şekilde değerlendirebiliyor mu?
+- Kültürel uyum: Cevaplar iş tanımındaki şirket kültürü ve beklentilerle uyumlu mu?
+- Davranışsal derinlik: Aday gerçek deneyimlerden somut örnekler veriyor mu yoksa klişe cevaplar mı veriyor?
+- Motivasyon: Aday pozisyona ve şirkete gerçek ilgi gösteriyor mu?
+
+Klişe, yüzeysel veya somut örnek içermeyen cevaplara düşük puan ver.
+"Takım çalışmasına önem veririm" gibi genel ifadeler yeterli DEĞİLDİR — somut bir deneyim anlatılmalı."""
+    else:
+        evaluation_criteria = """
+Aday sadece gerçekten tatmin edici ve teknik olarak doğru bir cevap verdiyse yüksek puan ver."""
 
     system_prompt = f"""
 Sen uzman bir mülakatçısın ve bir adayın mülakat performansını değerlendiriyorsun.
@@ -26,7 +42,8 @@ Mülakat transkripti:
 
 Gerçek bir mülakatçı gibi son derece KATI ve GERÇEKÇİ değerlendir. 
 Adayın "bilmiyorum", "hatırlamıyorum" dediği, konuyu geçiştirdiği veya soruyu "(Pas geçildi)" diyerek atladığı durumlarda puanı acımasızca KIR (0-20 arası).
-Şişirilmiş, cömert puanlar verme. Aday sadece gerçekten tatmin edici ve teknik olarak doğru bir cevap verdiyse yüksek puan ver.
+Şişirilmiş, cömert puanlar verme.
+{evaluation_criteria}
 
 SADECE geçerli bir JSON nesnesi döndür:
 {{

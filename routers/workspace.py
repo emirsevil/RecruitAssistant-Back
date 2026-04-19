@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -6,6 +6,8 @@ from schemas.workspace import (
     WorkspaceCreate,
     WorkspaceUpdate,
     WorkspaceResponse,
+    WorkspaceCreateResponse,
+    WorkspaceCategoriesUpdate,
 )
 from schemas import quiz as quiz_schema
 from crud import quiz as quiz_crud
@@ -20,6 +22,8 @@ from crud.workspace import (
     get_workspaces_by_user,
     update_workspace,
     delete_workspace,
+    set_workspace_categories,
+    search_all_categories,
 )
 from routers.auth import get_current_user
 import models
@@ -28,21 +32,30 @@ router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
 
 # POST  /workspaces/
-@router.post("/", response_model=WorkspaceResponse, status_code=201)
-def create_new_workspace(
+@router.post("/", response_model=WorkspaceCreateResponse, status_code=201)
+async def create_new_workspace(
     workspace: WorkspaceCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Create a new workspace for the authenticated user."""
-    # Ensure user_id in the creation logic matches the current user
+    """Create a new workspace and extract suggested categories from the JD."""
     workspace_data = workspace.model_dump()
     workspace_data["user_id"] = current_user.id
     
-    # We might need a slightly different create_workspace call if the schema allows passing user_id
     from schemas.workspace import WorkspaceCreate
     updated_workspace = WorkspaceCreate(**workspace_data)
-    return create_workspace(db, updated_workspace)
+    db_workspace = create_workspace(db, updated_workspace)
+
+    # Extract categories from JD if provided
+    suggested_categories = []
+    job_desc = workspace.job_description or ""
+    if job_desc.strip():
+        suggested_categories = await extract_skills_from_job_description(job_desc)
+
+    # Build response with suggested categories
+    response = WorkspaceCreateResponse.model_validate(db_workspace)
+    response.suggested_categories = suggested_categories
+    return response
 
 
 # GET  /workspaces/
@@ -105,6 +118,40 @@ def remove_workspace(
         
     delete_workspace(db, workspace_id)
     return None
+
+
+# PUT  /workspaces/{workspace_id}/categories
+@router.put("/{workspace_id}/categories", response_model=WorkspaceResponse)
+def confirm_workspace_categories(
+    workspace_id: int,
+    body: WorkspaceCategoriesUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Confirm and save the workspace categories (one-time after creation)."""
+    db_workspace = get_workspace(db, workspace_id)
+    if not db_workspace:
+        raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if db_workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
+    if len(body.categories) > 10:
+        raise HTTPException(status_code=400, detail="En fazla 10 kategori seçilebilir")
+
+    set_workspace_categories(db, workspace_id, body.categories)
+    db.refresh(db_workspace)
+    return db_workspace
+
+
+# GET  /categories/search
+@router.get("/categories/search", response_model=list[str])
+def search_categories(
+    q: str = Query("", min_length=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Search existing categories across all workspaces for autocomplete."""
+    return search_all_categories(db, q)
 
 @router.post("/{workspace_id}/quizzes/generate", response_model=list[quiz_schema.QuizGroupResponse])
 async def generate_quizzes_for_workspace(

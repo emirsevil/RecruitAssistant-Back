@@ -10,7 +10,7 @@ class MockQuestion(BaseModel):
 
 class MockInterviewRequest(BaseModel):
     workspace_id: int
-    categories: str
+    categories: List[str]
     difficulty: str
     interview_type: str
 

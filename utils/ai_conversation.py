@@ -64,34 +64,85 @@ Mülakat türü: {interview_type}
 SADECE mülakatçının söyleyeceği Türkçe metni döndür, başka bir şey yazma.
 """
 
-QUESTION_GENERATION_PROMPT = """
-Sen uzman bir teknik ve İK mülakatçısın. Türkçe sorular üret.
-Görevin, aşağıdaki pozisyon için {difficulty} seviyesinde {interview_type} mülakat soruları üretmek.
+HR_QUESTION_GENERATION_PROMPT = """
+Sen uzman bir İK mülakatçısın. Davranışsal ve durumsal mülakat sorularında uzmanlaşmışsın.
+Görevin, aşağıdaki pozisyon için {difficulty} seviyesinde İK / Davranışsal mülakat soruları üretmek.
 
 Pozisyon açıklaması:
 {job_description}
 
-Odaklanılacak konular/kategoriler: {categories}
-
-Tam olarak 3 ile 5 arası soru üret.
-SADECE geçerli bir JSON nesnesi döndür. Her soru Türkçe olmalı:
+ZORUNLU KURALLAR:
+1. Toplamda TAM 5 soru üret.
+2. İş tanımını derinlemesine analiz et ve soruları pozisyona özel olarak tasarla.
+   - İş tanımında "hızlı tempolu ortam" geçiyorsa baskı altında çalışma sorusu sor.
+   - İş tanımında "takım çalışması" veya "cross-functional" geçiyorsa işbirliği sorusu sor.
+   - İş tanımında "müşteri" veya "stakeholder" geçiyorsa iletişim becerileri sorusu sor.
+   - İş tanımında "liderlik" veya "mentorluk" geçiyorsa liderlik sorusu sor.
+3. Soruların odak alanları:
+   - Kültürel uyum ve takım çalışması
+   - Problem çözme ve çatışma yönetimi
+   - İletişim ve liderlik becerileri
+   - Motivasyon, kariyer hedefleri ve öz farkındalık
+   - Uyum sağlama ve baskı altında çalışma
+4. Uygun olduğunda STAR yöntemini kullan (Durum, Görev, Aksiyon, Sonuç).
+5. Teknik veya kodlama soruları SORMA. Tamamen yumuşak beceriler, kişilik ve davranışsal yönlere odaklan.
+6. Tüm sorular Türkçe olmalı.
+7. SADECE geçerli bir JSON nesnesi döndür:
 {{
   "questions": [
-    {{ "id": 1, "question": "Kendinizden bahseder misiniz?", "topic": "Giriş", "aiResponse": true }},
-    {{ "id": 2, "question": "React nasıl çalışır?", "topic": "React", "aiResponse": false }}
+    {{ "id": 1, "question": "Kendinizden ve kariyer hedeflerinizden bahseder misiniz?", "topic": "Motivasyon", "aiResponse": true }},
+    {{ "id": 2, "question": "Bir ekip içinde çatışma yaşadığınız bir durumu anlatır mısınız?", "topic": "Çatışma Yönetimi", "aiResponse": false }}
+  ]
+}}
+"""
+
+TECHNICAL_QUESTION_GENERATION_PROMPT = """
+Sen uzman bir teknik mülakatçısın. Türkçe sorular üret.
+Görevin, aşağıdaki pozisyon için {difficulty} seviyesinde teknik mülakat soruları üretmek.
+
+Pozisyon açıklaması:
+{job_description}
+
+ZORUNLU KURALLAR:
+1. Toplamda TAM 5 soru üret.
+2. Şu kategorilerin HER BİRİ için tam 1 soru üret: {categories}
+   Bu sana {num_categories} soru verir.
+{extra_instruction}
+3. SADECE geçerli bir JSON nesnesi döndür. Her soru Türkçe olmalı:
+{{
+  "questions": [
+    {{ "id": 1, "question": "React nasıl çalışır?", "topic": "React", "aiResponse": false }},
+    {{ "id": 2, "question": "API optimize etme stratejilerinden bahseder misiniz?", "topic": "Backend", "aiResponse": false }}
   ]
 }}
 """
 
 
 def generate_turkish_questions(job_description: str, categories: str, difficulty: str, interview_type: str) -> list:
-    """Generate interview questions in Turkish."""
-    system_prompt = QUESTION_GENERATION_PROMPT.format(
-        job_description=job_description,
-        categories=categories,
-        difficulty=difficulty,
-        interview_type=interview_type
-    )
+    """Generate interview questions in Turkish — dispatches to HR or Technical prompt."""
+    if interview_type == "hr":
+        system_prompt = HR_QUESTION_GENERATION_PROMPT.format(
+            job_description=job_description,
+            difficulty=difficulty,
+        )
+    else:
+        # Technical: use categories
+        category_list = [c.strip() for c in categories.split(",") if c.strip()]
+        num_categories = min(len(category_list), 5)
+        num_extra = 5 - num_categories
+
+        if num_extra > 0:
+            extra_instruction = f"Ek olarak, iş tanımına göre yukarıdaki kategorilerden FARKLI konularda {num_extra} soru daha üret."
+        else:
+            extra_instruction = ""
+
+        system_prompt = TECHNICAL_QUESTION_GENERATION_PROMPT.format(
+            job_description=job_description,
+            categories=categories,
+            difficulty=difficulty,
+            num_categories=num_categories,
+            extra_instruction=extra_instruction,
+        )
 
     try:
         client = get_ai_client()
