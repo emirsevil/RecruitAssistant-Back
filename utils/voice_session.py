@@ -148,6 +148,9 @@ class VoiceInterviewSession:
         """User uploaded answer via REST. Process the given transcript."""
         if self.state != "listening":
             return
+        if self._is_wrapping_up:
+            # Interview is winding down — ignore further answers
+            return
 
         self.current_candidate_transcript = transcript.strip()
         if not self.current_candidate_transcript:
@@ -167,6 +170,9 @@ class VoiceInterviewSession:
     async def handle_pass_question(self):
         """Skip the current question and move to the next one."""
         if self.state == "done" or self.state == "evaluating":
+            return
+        if self._is_wrapping_up:
+            # Already speaking the goodbye — don't repeat the wrap-up flow
             return
 
         # Cancel any active TTS first
