@@ -138,7 +138,62 @@ async def voice_interview_websocket(
 
                 msg_type = data.get("type", "")
 
-                if msg_type == "start_session":
+                if msg_type == "resume_session":
+                    if session is not None:
+                        await send_json({"type": "error", "message": "Oturum zaten aktif"})
+                        continue
+
+                    resume_id = data.get("interview_id")
+                    if not resume_id:
+                        await send_json({"type": "error", "message": "interview_id gerekli"})
+                        continue
+
+                    db = get_db_session()
+                    iv = None
+                    try:
+                        from crud.interview import get_interview as _get_iv
+                        iv = _get_iv(db, int(resume_id))
+                    except Exception as e:
+                        print(f"[WS] resume lookup failed: {e}")
+                        iv = None
+
+                    if not iv:
+                        await send_json({"type": "error", "message": "Mülakat bulunamadı"})
+                        db.close()
+                        db = None
+                        continue
+
+                    workspace = get_workspace(db, iv.workspace_id)
+                    if not workspace or workspace.user_id != current_user.id:
+                        await send_json({"type": "error", "message": "Bu mülakata erişim yetkiniz yok"})
+                        db.close()
+                        db = None
+                        continue
+
+                    if iv.status not in ("in_progress", None):
+                        await send_json({
+                            "type": "error",
+                            "message": "Bu mülakat artık devam ettirilemez.",
+                        })
+                        db.close()
+                        db = None
+                        continue
+
+                    interview_id = iv.id
+                    session_start_time = time.time()
+                    session = VoiceInterviewSession(
+                        send_json=send_json,
+                        send_binary=send_binary,
+                        workspace_id=iv.workspace_id,
+                        categories=iv.categories or "Genel",
+                        difficulty=iv.difficulty or "junior",
+                        interview_type=iv.interview_type or "hr",
+                        job_description=workspace.job_description or "",
+                        interview_id=iv.id,
+                    )
+                    await session.resume_from_db()
+
+                elif msg_type == "start_session":
                     if session is not None:
                         await send_json({"type": "error", "message": "Oturum zaten aktif"})
                         continue
@@ -238,20 +293,13 @@ async def voice_interview_websocket(
 
     except WebSocketDisconnect:
         print("[WS] Client disconnected")
-        # Mark as cancelled if session was in progress
-        if db and interview_id:
+        # Keep status as "in_progress" so the user can resume after a refresh.
+        # Snapshot whatever qa_pairs / conversation_history exist so far.
+        if db and interview_id and session:
             try:
-                from crud.interview import get_interview
-                iv = get_interview(db, interview_id)
-                if iv and iv.status == "in_progress":
-                    # Save whatever qa_pairs and conversation history exist so far
-                    if session:
-                        await _save_session_to_db(session, db, interview_id, session_start_time)
-                    
-                    duration = int(time.time() - session_start_time) if session_start_time else None
-                    update_interview(db=db, interview_id=interview_id, status="cancelled", duration_seconds=duration)
-            except Exception:
-                pass
+                await session._persist_progress()
+            except Exception as e:
+                print(f"[WS] progress snapshot failed: {e}")
     except Exception as e:
         print(f"[WS] Unexpected error: {e}")
         try:

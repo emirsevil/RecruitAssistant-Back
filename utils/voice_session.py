@@ -24,6 +24,8 @@ from utils.ai_conversation import (
     generate_interviewer_response,
 )
 from utils.ai_evaluator import evaluate_interview
+from database import SessionLocal
+from crud.interview import get_interview, update_interview_feedback
 
 load_dotenv()
 
@@ -356,6 +358,123 @@ class VoiceInterviewSession:
                 "topic": q.get("topic", ""),
                 "answer": "(Pas geçildi)" if passed else (self.current_accumulated_answer.strip() or "(Cevap verilmedi)"),
             })
+        # Snapshot in-progress state to DB so a refresh can resume from this point.
+        try:
+            asyncio.create_task(self._persist_progress())
+        except RuntimeError:
+            # No running loop (shouldn't happen in normal flow) — skip persistence.
+            pass
+
+    async def _persist_progress(self):
+        """Snapshot current qa_pairs / conversation_history / question index to DB.
+
+        This runs after each `_save_current_answer` so that if the user refreshes
+        the page mid-interview, `resume_from_db` can rebuild the session.
+        """
+        if not self.interview_id:
+            return
+        snapshot = {
+            "qa_pairs": self.qa_pairs,
+            "conversation_history": self.conversation_history,
+            "current_question_index": self.current_question_index,
+            "in_progress": True,
+        }
+        loop = asyncio.get_event_loop()
+
+        def _write():
+            db = SessionLocal()
+            try:
+                update_interview_feedback(
+                    db=db,
+                    interview_id=self.interview_id,
+                    feedback=json.dumps(snapshot, ensure_ascii=False),
+                )
+            finally:
+                db.close()
+
+        await loop.run_in_executor(None, _write)
+
+    async def resume_from_db(self):
+        """Rebuild a session from the persisted DB state and re-ask the current question.
+
+        Used when the frontend sends `resume_session` after a page refresh —
+        the user picks up exactly at the question they left off on, and the AI
+        re-speaks that question from scratch.
+        """
+        self._is_running = True
+
+        loop = asyncio.get_event_loop()
+
+        def _read():
+            db = SessionLocal()
+            try:
+                iv = get_interview(db, self.interview_id)
+                if not iv:
+                    return None
+                questions = []
+                if iv.transcript and iv.transcript != "[voice_session_started]":
+                    try:
+                        questions = json.loads(iv.transcript)
+                    except json.JSONDecodeError:
+                        questions = []
+                snapshot = {}
+                if iv.feedback:
+                    try:
+                        snapshot = json.loads(iv.feedback)
+                    except json.JSONDecodeError:
+                        snapshot = {}
+                return {"questions": questions, "snapshot": snapshot}
+            finally:
+                db.close()
+
+        data = await loop.run_in_executor(None, _read)
+        if not data or not data["questions"]:
+            await self.send_json({"type": "error", "message": "Mülakat verisi bulunamadı."})
+            return
+
+        self.questions = data["questions"]
+        snapshot = data["snapshot"] or {}
+        self.qa_pairs = snapshot.get("qa_pairs", []) or []
+        self.conversation_history = snapshot.get("conversation_history", []) or []
+        # Resume picks up at the next un-answered question
+        self.current_question_index = min(
+            len(self.qa_pairs),
+            max(0, len(self.questions) - 1),
+        )
+        # Drop any partial in-progress answer state for the current question.
+        self.follow_up_count = 0
+        self.current_candidate_transcript = ""
+        self.current_accumulated_answer = ""
+
+        await self._connect_tts()
+
+        await self.send_json({
+            "type": "session_started",
+            "interview_id": self.interview_id,
+            "questions": self.questions,
+            "resumed": True,
+            "current_question_index": self.current_question_index,
+            "qa_pairs": self.qa_pairs,
+            "conversation_history": self.conversation_history,
+        })
+
+        # If all questions were already answered, jump straight to evaluation.
+        if len(self.qa_pairs) >= len(self.questions):
+            self._is_wrapping_up = True
+            await self._run_evaluation()
+            return
+
+        current_q = self.questions[self.current_question_index].get("question", "")
+        resume_text = (
+            "Tekrar hoş geldiniz. Kaldığımız yerden devam edelim. "
+            f"Sorumuza dönelim: {current_q}"
+        )
+        self.conversation_history.append({
+            "role": "interviewer",
+            "text": resume_text,
+            "action": "resume",
+        })
+        await self._speak_text(resume_text, question_index=self.current_question_index)
 
     # ─── Cartesia TTS ────────────────────────────────────────────────
 
