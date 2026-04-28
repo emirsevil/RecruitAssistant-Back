@@ -38,21 +38,25 @@ async def create_new_workspace(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Create a new workspace and extract suggested categories from the JD."""
+    """Create a new workspace and extract + persist suggested categories from the JD."""
     workspace_data = workspace.model_dump()
     workspace_data["user_id"] = current_user.id
-    
+
     from schemas.workspace import WorkspaceCreate
     updated_workspace = WorkspaceCreate(**workspace_data)
     db_workspace = create_workspace(db, updated_workspace)
 
-    # Extract categories from JD if provided
-    suggested_categories = []
+    # Extract categories from JD if provided, then persist them so both
+    # mock-interview and quizzes can read them straight from workspace.categories
+    # without a second confirmation step.
+    suggested_categories: list[str] = []
     job_desc = workspace.job_description or ""
     if job_desc.strip():
         suggested_categories = await extract_skills_from_job_description(job_desc)
+        if suggested_categories:
+            set_workspace_categories(db, db_workspace.id, suggested_categories)
+            db.refresh(db_workspace)
 
-    # Build response with suggested categories
     response = WorkspaceCreateResponse.model_validate(db_workspace)
     response.suggested_categories = suggested_categories
     return response
@@ -237,22 +241,29 @@ def list_workspace_quizzes(
 
 @router.post("/{workspace_id}/skills/extract", response_model=list[str])
 async def extract_workspace_skills(
-    workspace_id: int, 
+    workspace_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Analyze workspace JD and extract key technical skills for an owned workspace."""
+    """Analyze workspace JD and extract key technical skills for an owned workspace.
+
+    Also persists the result to workspace.categories so older workspaces (created
+    before auto-persist) self-heal on first call.
+    """
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
     if workspace.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
-    
+
     job_desc = workspace.job_description or ""
     if not job_desc:
         return []
-    
-    return await extract_skills_from_job_description(job_desc)
+
+    skills = await extract_skills_from_job_description(job_desc)
+    if skills:
+        set_workspace_categories(db, workspace_id, skills)
+    return skills
 
 @router.post("/{workspace_id}/quizzes/generate-targeted", response_model=list[quiz_schema.QuizGroupResponse])
 async def generate_targeted_workspace_quizzes(
