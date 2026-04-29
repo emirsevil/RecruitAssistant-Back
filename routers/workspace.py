@@ -282,7 +282,33 @@ async def generate_targeted_workspace_quizzes(
     job_desc = workspace.job_description or ""
     selections = [s.model_dump() for s in request.selections]
     
-    generated = await generate_targeted_quizzes(job_desc, selections, language=request.language or "tr")
+    # Collect existing question texts keyed by "topic|difficulty" so the
+    # generator can instruct the LLM to avoid repeating them.
+    existing_questions: dict[str, list[str]] = {}
+    for sel in request.selections:
+        for diff in sel.difficulties:
+            key = f"{sel.title}|{diff}"
+            existing_quizzes = (
+                db.query(models.Quiz)
+                .filter(
+                    models.Quiz.workspace_id == workspace_id,
+                    models.Quiz.title == sel.title,
+                    models.Quiz.difficulty == diff,
+                )
+                .all()
+            )
+            q_texts = []
+            for eq in existing_quizzes:
+                for question in eq.questions:
+                    q_texts.append(question.question)
+            # Keep only the most recent 20 questions to avoid prompt bloat
+            if q_texts:
+                existing_questions[key] = q_texts[-20:]
+    
+    generated = await generate_targeted_quizzes(
+        job_desc, selections, language=request.language or "tr",
+        existing_questions=existing_questions if existing_questions else None,
+    )
     
     quiz_groups = []
     
