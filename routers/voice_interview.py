@@ -10,6 +10,7 @@ Handles:
 import json
 import os
 import time
+from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from openai import OpenAI
@@ -102,10 +103,10 @@ async def voice_interview_websocket(
     await websocket.accept()
     print(f"[WS] Client {current_user.email} connected")
 
-    session: VoiceInterviewSession | None = None
-    db: Session | None = None
-    interview_id: int | None = None
-    session_start_time: float | None = None
+    session: Optional[VoiceInterviewSession] = None
+    db: Optional[Session] = None
+    interview_id: Optional[int] = None
+    session_start_time: Optional[float] = None
 
     async def send_json(data: dict):
         """Send a JSON message to the client."""

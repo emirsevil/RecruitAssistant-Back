@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 from database import SessionLocal
 import crud.quiz as crud
 import schemas.quiz as schemas
@@ -32,7 +33,7 @@ def read_quiz(quiz_id: int, db: Session = Depends(get_db)):
     return db_quiz
 
 @router.get("/", response_model=list[schemas.QuizResponse])
-def list_quizzes(skip: int = 0, limit: int = 100, workspace_id: int | None = None, db: Session = Depends(get_db)):
+def list_quizzes(skip: int = 0, limit: int = 100, workspace_id: Optional[int] = None, db: Session = Depends(get_db)):
     return crud.list_quizzes(db=db, skip=skip, limit=limit, workspace_id=workspace_id)
 
 @router.put("/{quiz_id}", response_model=schemas.QuizResponse)
@@ -137,4 +138,3 @@ def get_workspace_scores(
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
         
     return crud.get_scores_by_workspace(db=db, workspace_id=workspace_id, user_id=current_user.id)
-

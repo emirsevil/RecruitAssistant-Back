@@ -27,6 +27,7 @@ ADDING A NEW PROVIDER:
 import os
 import logging
 from functools import lru_cache
+from typing import Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -86,7 +87,7 @@ _DEFAULT_PROVIDER = "openai"
 #  PUBLIC API
 # ══════════════════════════════════════════════════════════════════════
 
-def _resolve_provider(provider: str | None = None) -> str:
+def _resolve_provider(provider: Optional[str] = None) -> str:
     """Resolve the provider name from the argument or environment variable."""
     name = (provider or os.getenv("AI_PROVIDER", _DEFAULT_PROVIDER)).lower().strip()
     if name not in PROVIDER_REGISTRY:
@@ -99,7 +100,7 @@ def _resolve_provider(provider: str | None = None) -> str:
     return name
 
 
-def get_ai_client(provider: str | None = None) -> OpenAI:
+def get_ai_client(provider: Optional[str] = None) -> OpenAI:
     """
     Return an OpenAI-compatible client configured for the given provider.
 
@@ -135,7 +136,7 @@ def get_ai_client(provider: str | None = None) -> OpenAI:
     return OpenAI(**kwargs)
 
 
-def get_model_name(tier: str = "default", provider: str | None = None) -> str:
+def get_model_name(tier: str = "default", provider: Optional[str] = None) -> str:
     """
     Return the model identifier for the given quality tier and provider.
 
