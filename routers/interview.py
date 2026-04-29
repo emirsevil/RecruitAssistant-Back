@@ -306,3 +306,29 @@ def discard_interview(
 
     update_interview(db=db, interview_id=interview_id, status="cancelled")
     return {"id": iv.id, "status": "cancelled"}
+
+
+@router.post("/discard-in-progress")
+def discard_all_in_progress(
+    workspace_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark every in-progress interview in a workspace as cancelled.
+
+    Used by the "Discard Interview" prompt on the Mock Interview setup screen
+    so the user clears all stale sessions in one click — otherwise abandoned
+    sessions from previous attempts pile up and the prompt keeps coming back.
+    """
+    workspace = get_workspace(db, workspace_id)
+    if not workspace or workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
+    rows = list_interviews(db, user_id=current_user.id, workspace_id=workspace_id)
+    cancelled_ids: list[int] = []
+    for iv in rows:
+        if (iv.status or "completed") == "in_progress":
+            update_interview(db=db, interview_id=iv.id, status="cancelled")
+            cancelled_ids.append(iv.id)
+
+    return {"cancelled_ids": cancelled_ids, "count": len(cancelled_ids)}

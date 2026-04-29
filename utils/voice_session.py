@@ -25,7 +25,7 @@ from utils.ai_conversation import (
 )
 from utils.ai_evaluator import evaluate_interview
 from database import SessionLocal
-from crud.interview import get_interview, update_interview_feedback
+from crud.interview import get_interview, update_interview, update_interview_feedback
 
 load_dotenv()
 
@@ -92,6 +92,7 @@ class VoiceInterviewSession:
         # Control flags
         self._is_running = False
         self._is_wrapping_up = False
+        self._completed = False
         self._evaluation_done = asyncio.Event()
 
         # Evaluation results (stored for DB persistence)
@@ -235,7 +236,23 @@ class VoiceInterviewSession:
 
     async def end_session(self):
         """End the session early — finalize current answer and run evaluation."""
-        if self.state == "done" or self.state == "evaluating":
+        # Already finished — re-emit the saved evaluation so a frontend that
+        # may have just started waiting on "session_complete" can transition
+        # cleanly. Without this, clicking End after the AI's auto-wrap-up
+        # leaves the UI hanging on the active interview screen.
+        if self.state == "done":
+            if self.last_evaluation:
+                await self.send_json({
+                    "type": "evaluation",
+                    "results": self.last_evaluation.get("results", []),
+                    "overall_score": self.last_evaluation.get("overall_score", 0),
+                    "overall_feedback": self.last_evaluation.get("overall_feedback", ""),
+                })
+            await self.send_json({"type": "session_complete"})
+            return
+
+        if self.state == "evaluating":
+            # Evaluation already kicked off — do nothing, the events are coming.
             return
 
         # Cancel any active TTS
@@ -370,8 +387,12 @@ class VoiceInterviewSession:
 
         This runs after each `_save_current_answer` so that if the user refreshes
         the page mid-interview, `resume_from_db` can rebuild the session.
+        Skips if the session has already been finalised (so a late task can't
+        overwrite the saved evaluation feedback).
         """
         if not self.interview_id:
+            return
+        if self._completed:
             return
         snapshot = {
             "qa_pairs": self.qa_pairs,
@@ -604,12 +625,14 @@ class VoiceInterviewSession:
                 "overall_score": 0,
                 "overall_feedback": "Değerlendirilecek cevap bulunamadı.",
             }
+            await self._mark_completed()
             await self.send_json({
                 "type": "evaluation",
                 **self.last_evaluation,
             })
             await self.send_json({"type": "session_complete"})
             self.state = "done"
+            self._evaluation_done.set()
             return
 
         self.state = "evaluating"
@@ -629,6 +652,13 @@ class VoiceInterviewSession:
         # Store for DB persistence
         self.last_evaluation = evaluation
 
+        # Persist results + flip status to "completed" BEFORE notifying the
+        # frontend, so even if the user clicks "Start Another Interview" the
+        # instant they see the results panel, the row is already finalised.
+        # This also short-circuits any late `_persist_progress` task from
+        # accidentally re-writing an `in_progress` snapshot.
+        await self._mark_completed()
+
         await self.send_json({
             "type": "evaluation",
             "results": evaluation.get("results", []),
@@ -639,6 +669,52 @@ class VoiceInterviewSession:
         await self.send_json({"type": "session_complete"})
         self.state = "done"
         self._evaluation_done.set()
+
+    async def _mark_completed(self):
+        """Write the final evaluation feedback + status='completed' to the DB.
+
+        Called from inside `_run_evaluation` so completion is durable regardless
+        of whether the WS handler's outer `_save_session_to_db` runs (it can be
+        skipped if the client disconnects mid-flow).
+        """
+        if not self.interview_id:
+            return
+        feedback = {
+            "qa_pairs": self.qa_pairs,
+            "conversation_history": self.conversation_history,
+        }
+        if self.last_evaluation:
+            feedback["results"] = self.last_evaluation.get("results", [])
+            feedback["overall_score"] = self.last_evaluation.get("overall_score", 0)
+            feedback["overall_feedback"] = self.last_evaluation.get("overall_feedback", "")
+
+        # Capture finality flag so the disconnect handler knows not to re-snapshot.
+        self._completed = True
+
+        loop = asyncio.get_event_loop()
+
+        def _write():
+            db = SessionLocal()
+            try:
+                update_interview_feedback(
+                    db=db,
+                    interview_id=self.interview_id,
+                    feedback=json.dumps(feedback, ensure_ascii=False),
+                )
+                update_interview(
+                    db=db,
+                    interview_id=self.interview_id,
+                    overall_score=self.last_evaluation.get("overall_score", 0)
+                    if self.last_evaluation
+                    else None,
+                    status="completed",
+                )
+            except Exception as e:
+                print(f"[Session] _mark_completed write failed: {e}")
+            finally:
+                db.close()
+
+        await loop.run_in_executor(None, _write)
 
     async def wait_for_evaluation(self, timeout: float = 120):
         """Wait for evaluation to complete (used by WS handler for DB persistence)."""

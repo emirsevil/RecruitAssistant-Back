@@ -228,6 +228,18 @@ async def voice_interview_websocket(
 
                     job_description = workspace.job_description
 
+                    # Auto-cancel any stale in-progress interviews in this
+                    # workspace before creating a new one. Without this, rows
+                    # left behind by abandoned/refreshed sessions would pile
+                    # up forever in the DB.
+                    try:
+                        from crud.interview import list_interviews as _list_iv
+                        for old in _list_iv(db, user_id=current_user.id, workspace_id=workspace_id):
+                            if (old.status or "completed") == "in_progress":
+                                update_interview(db=db, interview_id=old.id, status="cancelled")
+                    except Exception as e:
+                        print(f"[WS] auto-cancel stale in_progress failed: {e}")
+
                     # Create interview record in DB with full metadata
                     interview = create_interview(
                         db=db,
@@ -294,10 +306,16 @@ async def voice_interview_websocket(
     except WebSocketDisconnect:
         print("[WS] Client disconnected")
         # Keep status as "in_progress" so the user can resume after a refresh.
-        # Snapshot whatever qa_pairs / conversation_history exist so far.
+        # Snapshot whatever qa_pairs / conversation_history exist so far —
+        # but ONLY if the session hasn't already been completed (otherwise we'd
+        # stomp the freshly saved evaluation feedback and the row would look
+        # in-progress on the next visit even though the user finished it).
         if db and interview_id and session:
             try:
-                await session._persist_progress()
+                from crud.interview import get_interview as _get_iv
+                iv = _get_iv(db, interview_id)
+                if iv and iv.status == "in_progress" and not getattr(session, "_completed", False):
+                    await session._persist_progress()
             except Exception as e:
                 print(f"[WS] progress snapshot failed: {e}")
     except Exception as e:

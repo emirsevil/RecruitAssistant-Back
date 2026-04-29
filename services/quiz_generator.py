@@ -50,6 +50,8 @@ async def extract_skills_from_job_description(job_desc: str) -> List[str]:
         return skills if isinstance(skills, list) else []
     except Exception as e:
         logger.error(f"Error extracting skills: {e}")
+        if 'content' in locals():
+            logger.debug(f"Raw content that failed to parse: {content}")
         return []
 
 async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], language: str = "tr") -> List[Dict]:
@@ -133,7 +135,8 @@ async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], langu
         except Exception as e:
             logger.error(f"Error generating single quiz for {skill_name} {diff}: {e}")
             # Log raw content for debugging on parse failure
-            logger.debug(f"Raw content that failed to parse: {content}")
+            if 'content' in locals():
+                logger.debug(f"Raw content that failed to parse: {content}")
             return []
 
     # Flatten selections into individual (skill, difficulty) tasks
