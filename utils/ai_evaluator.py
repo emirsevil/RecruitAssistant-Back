@@ -52,7 +52,7 @@ SADECE geçerli bir JSON nesnesi döndür:
       "question": "orijinal soru metni",
       "topic": "konu",
       "score": 75,
-      "feedback": "2-3 cümle yapıcı Türkçe geri bildirim"
+      "feedback": "2-3 cümle yapıcı Türkçe geri bildirim, feedback verirken sorunun kategorisini belirterek cevaplamayı unutma."
     }}
   ],
   "overall_score": 78,
