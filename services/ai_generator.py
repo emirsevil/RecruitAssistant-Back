@@ -361,8 +361,8 @@ def generate_cv_latex_stream(
     output_language: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """Stream AI-generated CV LaTeX using a generator."""
-    client = get_ai_client()
-    model = get_model_name(tier="default")
+    client = get_ai_client(provider="openai")
+    model = get_model_name(tier="default", provider="openai")
     logger.info("Streaming CV LaTeX via %s", model)
     generation_instructions = "\n\n".join(
         part for part in [
@@ -394,8 +394,8 @@ def generate_cover_letter_latex_stream(
     output_language: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """Stream AI-generated Cover Letter LaTeX using a generator."""
-    client = get_ai_client()
-    model = get_model_name(tier="default")
+    client = get_ai_client(provider="openai")
+    model = get_model_name(tier="default", provider="openai")
     logger.info("Streaming Cover Letter LaTeX via %s", model)
     company_name = _extract_company_name(job_description)
     company_instruction = (
