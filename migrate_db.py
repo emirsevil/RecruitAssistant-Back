@@ -77,6 +77,18 @@ def run_migration():
                 print("hashed_password already exists in users.")
 
             print("Final migration complete! 🚀")
+
+            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='interviews'"))
+            cols = [row[0] for row in result]
+            print(f"interviews columns: {cols}")
+
+            if "avatar_provider" not in cols:
+                print("Adding avatar_provider to interviews...")
+                conn.execute(text("ALTER TABLE interviews ADD COLUMN avatar_provider TEXT DEFAULT 'rpm_cartesia'"))
+                conn.commit()
+                print("Successfully added avatar_provider to interviews.")
+            else:
+                print("avatar_provider already exists in interviews.")
     except Exception as e:
         print("Error during migration:", e)
 

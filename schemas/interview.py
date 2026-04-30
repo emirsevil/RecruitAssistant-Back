@@ -1,6 +1,8 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import datetime
+
+AvatarProvider = Literal["rpm_cartesia", "liveavatar_full"]
 
 class MockQuestion(BaseModel):
     id: int
@@ -17,6 +19,24 @@ class MockInterviewRequest(BaseModel):
 class MockInterviewResponse(BaseModel):
     interview_id: int
     questions: List[MockQuestion]
+
+
+class LiveAvatarBootstrapRequest(BaseModel):
+    workspace_id: int
+
+
+class LiveAvatarBootstrapResponse(BaseModel):
+    provider: AvatarProvider
+    liveavatar_session_id: str
+    livekit_url: str
+    livekit_client_token: str
+    max_session_duration: int
+
+
+class LiveAvatarStopRequest(BaseModel):
+    workspace_id: int
+    liveavatar_session_id: str
+    reason: Optional[str] = "CLIENT_ABORTED"
 
 # --- Phase 2: Evaluation Schemas ---
 
@@ -49,6 +69,7 @@ class InterviewSummary(BaseModel):
     workspace_id: int
     interview_type: str
     mode: str
+    avatar_provider: AvatarProvider = "rpm_cartesia"
     difficulty: Optional[str] = None
     categories: Optional[str] = None
     overall_score: Optional[int] = None
@@ -75,6 +96,7 @@ class InterviewDetail(BaseModel):
     workspace_id: int
     interview_type: str
     mode: str
+    avatar_provider: AvatarProvider = "rpm_cartesia"
     difficulty: Optional[str] = None
     categories: Optional[str] = None
     overall_score: Optional[int] = None

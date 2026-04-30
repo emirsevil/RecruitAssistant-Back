@@ -11,6 +11,7 @@ def create_interview(
     categories: str = None,
     mode: str = "text",
     status: str = "in_progress",
+    avatar_provider: str = "rpm_cartesia",
 ):
     db_interview = Interview(
         workspace_id=workspace_id,
@@ -20,6 +21,7 @@ def create_interview(
         categories=categories,
         mode=mode,
         status=status,
+        avatar_provider=avatar_provider,
     )
     db.add(db_interview)
     db.commit()

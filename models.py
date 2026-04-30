@@ -104,6 +104,7 @@ class Interview(Base):
     duration_seconds = Column(Integer, nullable=True)  # Interview duration in seconds
     status = Column(String, nullable=False, default="in_progress")  # "in_progress", "completed", "cancelled"
     mode = Column(String, nullable=False, default="text")            # "text" or "voice"
+    avatar_provider = Column(String, nullable=False, default="rpm_cartesia")
 
     # İlişkiler
     workspace = relationship("Workspace", back_populates="interviews")
