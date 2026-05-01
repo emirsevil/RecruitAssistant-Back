@@ -48,6 +48,7 @@ def get_interviews(
             workspace_id=iv.workspace_id,
             interview_type=iv.interview_type,
             mode=iv.mode or "text",
+            avatar_provider=iv.avatar_provider or "rpm_cartesia",
             difficulty=iv.difficulty,
             categories=iv.categories,
             overall_score=iv.overall_score,
@@ -161,6 +162,7 @@ def get_interview_detail(
         workspace_id=iv.workspace_id,
         interview_type=iv.interview_type,
         mode=iv.mode or "text",
+        avatar_provider=iv.avatar_provider or "rpm_cartesia",
         difficulty=iv.difficulty,
         categories=iv.categories,
         overall_score=iv.overall_score,
@@ -215,6 +217,7 @@ def generate_mock_interview(
         categories=categories_str,
         mode="text",
         status="in_progress",
+        avatar_provider="rpm_cartesia",
     )
 
     return MockInterviewResponse(

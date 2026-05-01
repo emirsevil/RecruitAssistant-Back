@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 from database import get_db
 import crud.quiz as crud
 import schemas.quiz as schemas

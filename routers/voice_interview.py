@@ -10,6 +10,7 @@ Handles:
 import json
 import os
 import time
+from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from openai import OpenAI
@@ -17,7 +18,9 @@ from openai import OpenAI
 from database import SessionLocal, get_db
 from crud.workspace import get_workspace
 from crud.interview import create_interview, update_interview_feedback, update_interview
+from schemas.interview import LiveAvatarBootstrapRequest, LiveAvatarBootstrapResponse, LiveAvatarStopRequest
 from utils.voice_session import VoiceInterviewSession
+from utils.liveavatar_client import LiveAvatarClient, LiveAvatarConfigError, LiveAvatarAPIError
 from routers.auth import get_current_user, get_current_user_ws
 import models
 
@@ -28,6 +31,7 @@ router = APIRouter(tags=["Voice Interview"])
 # All other LLM calls (question generation, conversation, evaluation) go through
 # the centralized provider in utils/ai_client.py.
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+liveavatar_client = LiveAvatarClient()
 
 @router.post("/voice-interview/transcribe")
 async def transcribe_audio(
@@ -66,6 +70,7 @@ async def _save_session_to_db(session, db, interview_id, session_start_time):
         evaluation_data = {
             "qa_pairs": session.qa_pairs,
             "conversation_history": session.conversation_history,
+            "delivery_metadata": getattr(session, "delivery_metadata", {}),
         }
 
         # Merge evaluation results into feedback if available
@@ -85,9 +90,78 @@ async def _save_session_to_db(session, db, interview_id, session_start_time):
             overall_score=session.last_evaluation.get("overall_score", 0) if hasattr(session, 'last_evaluation') and session.last_evaluation else None,
             duration_seconds=duration,
             status="completed",
+            avatar_provider=getattr(session, "active_avatar_provider", "rpm_cartesia"),
         )
     except Exception as e:
         print(f"[WS] Error saving to DB: {e}")
+
+
+@router.post("/voice-interview/liveavatar/bootstrap", response_model=LiveAvatarBootstrapResponse)
+async def bootstrap_liveavatar_session(
+    request: LiveAvatarBootstrapRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Create and start a LiveAvatar session, then return frontend-safe LiveKit credentials."""
+    workspace = get_workspace(db, request.workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Çalışma alanı bulunamadı")
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
+    try:
+        token_data = await liveavatar_client.create_session_token()
+        session_data = await liveavatar_client.start_session(token_data["session_token"])
+    except LiveAvatarConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except LiveAvatarAPIError as exc:
+        detail = (
+            f"LiveAvatar {exc.path} returned {exc.status_code}: "
+            f"{exc.response_body or str(exc)}"
+        )
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LiveAvatar başlatılamadı: {exc}") from exc
+
+    return LiveAvatarBootstrapResponse(
+        provider="liveavatar_full",
+        liveavatar_session_id=session_data["session_id"],
+        livekit_url=session_data["livekit_url"],
+        livekit_client_token=session_data["livekit_client_token"],
+        max_session_duration=session_data["max_session_duration"],
+    )
+
+
+@router.post("/voice-interview/liveavatar/stop")
+async def stop_liveavatar_session(
+    request: LiveAvatarStopRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Stop a bootstrap-created LiveAvatar session that never became a full interview session."""
+    workspace = get_workspace(db, request.workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Çalışma alanı bulunamadı")
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
+    try:
+        await liveavatar_client.stop_session(
+            request.liveavatar_session_id,
+            request.reason or "CLIENT_ABORTED",
+        )
+    except LiveAvatarAPIError as exc:
+        if exc.status_code == 404:
+            return {"stopped": True, "already_closed": True}
+        detail = (
+            f"LiveAvatar {exc.path} returned {exc.status_code}: "
+            f"{exc.response_body or str(exc)}"
+        )
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LiveAvatar durdurulamadı: {exc}") from exc
+
+    return {"stopped": True}
 
 
 @router.websocket("/ws/voice-interview")
@@ -102,10 +176,10 @@ async def voice_interview_websocket(
     await websocket.accept()
     print(f"[WS] Client {current_user.email} connected")
 
-    session: VoiceInterviewSession | None = None
-    db: Session | None = None
-    interview_id: int | None = None
-    session_start_time: float | None = None
+    session: Optional[VoiceInterviewSession] = None
+    db: Optional[Session] = None
+    interview_id: Optional[int] = None
+    session_start_time: Optional[float] = None
 
     async def send_json(data: dict):
         """Send a JSON message to the client."""
@@ -204,6 +278,15 @@ async def voice_interview_websocket(
                     categories = ", ".join(raw_categories) if isinstance(raw_categories, list) else raw_categories
                     difficulty = data.get("difficulty", "junior")
                     interview_type = data.get("interview_type", "hr")
+                    avatar_provider = data.get("avatar_provider", "rpm_cartesia")
+                    liveavatar_session_id = data.get("liveavatar_session_id")
+
+                    if avatar_provider == "liveavatar_full" and not liveavatar_session_id:
+                        await send_json({
+                            "type": "error",
+                            "message": "LiveAvatar oturumu eksik. Klasik avatar moduna geri dönülüyor.",
+                        })
+                        avatar_provider = "rpm_cartesia"
 
                     # Validate workspace and ownership
                     db = get_db_session()
@@ -250,6 +333,7 @@ async def voice_interview_websocket(
                         categories=categories,
                         mode="voice",
                         status="in_progress",
+                        avatar_provider=avatar_provider,
                     )
                     interview_id = interview.id
                     session_start_time = time.time()
@@ -264,6 +348,8 @@ async def voice_interview_websocket(
                         interview_type=interview_type,
                         job_description=job_description,
                         interview_id=interview.id,
+                        requested_avatar_provider=avatar_provider,
+                        liveavatar_session_id=liveavatar_session_id,
                     )
 
                     # Start the session (async: generates questions, connects to Cartesia, speaks intro)
@@ -282,6 +368,17 @@ async def voice_interview_websocket(
                 elif msg_type == "pass_question":
                     if session:
                         await session.handle_pass_question()
+
+                elif msg_type == "avatar_done_speaking":
+                    if session:
+                        await session.handle_avatar_done_speaking(data.get("utterance_id", ""))
+
+                elif msg_type == "avatar_output_error":
+                    if session:
+                        await session.handle_avatar_output_error(
+                            data.get("utterance_id"),
+                            data.get("reason", "LiveAvatar output failed"),
+                        )
 
                 elif msg_type == "end_session":
                     if session:
@@ -312,12 +409,23 @@ async def voice_interview_websocket(
         # in-progress on the next visit even though the user finished it).
         if db and interview_id and session:
             try:
-                from crud.interview import get_interview as _get_iv
-                iv = _get_iv(db, interview_id)
-                if iv and iv.status == "in_progress" and not getattr(session, "_completed", False):
-                    await session._persist_progress()
-            except Exception as e:
-                print(f"[WS] progress snapshot failed: {e}")
+                from crud.interview import get_interview
+                iv = get_interview(db, interview_id)
+                if iv and iv.status == "in_progress":
+                    # Save whatever qa_pairs and conversation history exist so far
+                    if session:
+                        await _save_session_to_db(session, db, interview_id, session_start_time)
+                    
+                    duration = int(time.time() - session_start_time) if session_start_time else None
+                    update_interview(
+                        db=db,
+                        interview_id=interview_id,
+                        status="cancelled",
+                        duration_seconds=duration,
+                        avatar_provider=getattr(session, "active_avatar_provider", "rpm_cartesia") if session else "rpm_cartesia",
+                    )
+            except Exception:
+                pass
     except Exception as e:
         print(f"[WS] Unexpected error: {e}")
         try:
