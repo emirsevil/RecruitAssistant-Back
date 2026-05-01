@@ -23,17 +23,20 @@ router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
 @router.get("/", response_model=list[InterviewSummary])
 def get_interviews(
-    workspace_id: Optional[int] = Query(None), 
+    workspace_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List all interviews, optionally filtered by an owned workspace_id."""
+    """List all interviews, optionally filtered by an owned workspace_id and status."""
     if workspace_id:
         workspace = get_workspace(db, workspace_id)
         if not workspace or workspace.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
-            
+
     interviews = list_interviews(db, user_id=current_user.id, workspace_id=workspace_id)
+    if status:
+        interviews = [iv for iv in interviews if (iv.status or "completed") == status]
     results = []
     for iv in interviews:
         company_name = None
@@ -104,14 +107,17 @@ def get_interview_detail(
         overall_feedback = feedback_data.get("overall_feedback")
         conversation_history = feedback_data.get("conversation_history")
 
-        # Build QA list from qa_pairs, merge evaluation results
-        eval_by_question = {}
-        for r in eval_results:
-            eval_by_question[r.get("question", "")] = r
+        eval_by_question = {r.get("question", ""): r for r in eval_results if r.get("question")}
 
-        for qa in qa_pairs:
+        for i, qa in enumerate(qa_pairs):
             q_text = qa.get("question", "")
-            eval_r = eval_by_question.get(q_text, {})
+            # Try to match by exact question text first, fallback to index
+            eval_r = eval_by_question.get(q_text)
+            if not eval_r and i < len(eval_results):
+                eval_r = eval_results[i]
+            if not eval_r:
+                eval_r = {}
+
             questions_list.append(InterviewDetailQA(
                 question=q_text,
                 topic=qa.get("topic", ""),
@@ -125,25 +131,28 @@ def get_interview_detail(
         qa_pairs = feedback_data.get("qa_pairs", [])
         overall_feedback = feedback_data.get("overall_feedback")
 
-        # Build lookup maps
-        eval_by_question = {}
-        for r in eval_results:
-            eval_by_question[r.get("question", "")] = r
-
-        answer_by_question = {}
-        for qa in qa_pairs:
-            answer_by_question[qa.get("question", "")] = qa.get("answer", "")
+        eval_by_question = {r.get("question", ""): r for r in eval_results if r.get("question")}
+        answer_by_question = {qa.get("question", ""): qa.get("answer", "") for qa in qa_pairs if qa.get("question")}
 
         # Use transcript_data (original questions) as the base
-        for q in transcript_data:
+        for i, q in enumerate(transcript_data):
             q_text = q.get("question", "") if isinstance(q, dict) else ""
             topic = q.get("topic", "") if isinstance(q, dict) else ""
-            eval_r = eval_by_question.get(q_text, {})
-            answer = answer_by_question.get(q_text, "")
+            
+            answer = answer_by_question.get(q_text)
+            if answer is None and i < len(qa_pairs):
+                answer = qa_pairs[i].get("answer", "")
+            
+            eval_r = eval_by_question.get(q_text)
+            if not eval_r and i < len(eval_results):
+                eval_r = eval_results[i]
+            if not eval_r:
+                eval_r = {}
+
             questions_list.append(InterviewDetailQA(
                 question=q_text,
                 topic=topic,
-                answer=answer,
+                answer=answer or "",
                 score=eval_r.get("score"),
                 feedback=eval_r.get("feedback"),
             ))
@@ -186,10 +195,11 @@ def generate_mock_interview(
         raise HTTPException(status_code=400, detail="Workspace does not have a job description")
 
     job_description = workspace.job_description
+    categories_str = ", ".join(request.categories) if request.categories else "Genel"
 
     questions = generate_interview_questions(
         job_description=job_description,
-        categories=request.categories,
+        categories=categories_str,
         difficulty=request.difficulty,
         interview_type=request.interview_type
     )
@@ -204,7 +214,7 @@ def generate_mock_interview(
         interview_type=request.interview_type,
         transcript=transcript,
         difficulty=request.difficulty,
-        categories=request.categories,
+        categories=categories_str,
         mode="text",
         status="in_progress",
         avatar_provider="rpm_cartesia",
@@ -245,7 +255,8 @@ def evaluate_mock_interview(request: EvaluateRequest, db: Session = Depends(get_
     evaluation = evaluate_interview(
         qa_pairs=qa_dicts,
         job_description=job_description,
-        difficulty=request.difficulty
+        difficulty=request.difficulty,
+        interview_type=interview.interview_type or "technical"
     )
 
     if not evaluation.get("results"):
@@ -273,3 +284,54 @@ def evaluate_mock_interview(request: EvaluateRequest, db: Session = Depends(get_
         overall_score=evaluation.get("overall_score", 0),
         overall_feedback=evaluation.get("overall_feedback", "")
     )
+
+
+@router.post("/{interview_id}/discard")
+def discard_interview(
+    interview_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark an in-progress interview as cancelled.
+
+    Used when the user refreshes mid-interview and chooses to abandon the session
+    on the Mock Interview setup screen.
+    """
+    iv = get_interview(db, interview_id)
+    if not iv:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if iv.workspace and iv.workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu mülakata erişim yetkiniz yok")
+
+    if iv.status in ("completed", "cancelled"):
+        return {"id": iv.id, "status": iv.status}
+
+    update_interview(db=db, interview_id=interview_id, status="cancelled")
+    return {"id": iv.id, "status": "cancelled"}
+
+
+@router.post("/discard-in-progress")
+def discard_all_in_progress(
+    workspace_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark every in-progress interview in a workspace as cancelled.
+
+    Used by the "Discard Interview" prompt on the Mock Interview setup screen
+    so the user clears all stale sessions in one click — otherwise abandoned
+    sessions from previous attempts pile up and the prompt keeps coming back.
+    """
+    workspace = get_workspace(db, workspace_id)
+    if not workspace or workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
+    rows = list_interviews(db, user_id=current_user.id, workspace_id=workspace_id)
+    cancelled_ids: list[int] = []
+    for iv in rows:
+        if (iv.status or "completed") == "in_progress":
+            update_interview(db=db, interview_id=iv.id, status="cancelled")
+            cancelled_ids.append(iv.id)
+
+    return {"cancelled_ids": cancelled_ids, "count": len(cancelled_ids)}

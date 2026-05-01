@@ -1,0 +1,159 @@
+"""Refactor quiz system: group questions and link scores
+
+Revision ID: d36f2f1d6789
+Revises: 2d5d306b5d92
+Create Date: 2026-04-13 08:53:47.085553
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+from sqlalchemy import inspect as sa_inspect
+
+# revision identifiers, used by Alembic.
+revision: str = 'd36f2f1d6789'
+down_revision: Union[str, Sequence[str], None] = '2d5d306b5d92'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def _column_exists(table_name: str, column_name: str) -> bool:
+    """Check whether a column already exists in the given table."""
+    bind = op.get_bind()
+    inspector = sa_inspect(bind)
+    columns = [c["name"] for c in inspector.get_columns(table_name)]
+    return column_name in columns
+
+
+def _table_exists(table_name: str) -> bool:
+    """Check whether a table already exists."""
+    bind = op.get_bind()
+    inspector = sa_inspect(bind)
+    return table_name in inspector.get_table_names()
+
+
+def _safe_alter_column(table, column, existing_type, new_type):
+    """Alter a column type if the column exists, otherwise add it."""
+    if _column_exists(table, column):
+        op.alter_column(table, column,
+                        existing_type=existing_type,
+                        type_=new_type,
+                        existing_nullable=True)
+    else:
+        op.add_column(table, sa.Column(column, new_type, nullable=True))
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    # --- questions table ---
+    if not _table_exists('questions'):
+        op.create_table('questions',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('quiz_id', sa.Integer(), nullable=True),
+            sa.Column('question', sa.String(), nullable=False),
+            sa.Column('options', sa.JSON(), nullable=False),
+            sa.Column('correct_answer', sa.String(), nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.ForeignKeyConstraint(['quiz_id'], ['quizzes.id'], ),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_questions_id'), 'questions', ['id'], unique=False)
+
+    # --- quiz_scores changes ---
+    if not _column_exists('quiz_scores', 'quiz_id'):
+        op.add_column('quiz_scores', sa.Column('quiz_id', sa.Integer(), nullable=True))
+        # Backfill any existing rows with a default (0 or link to first quiz)
+        op.execute("UPDATE quiz_scores SET quiz_id = 0 WHERE quiz_id IS NULL")
+        op.alter_column('quiz_scores', 'quiz_id', nullable=False)
+
+    if not _column_exists('quiz_scores', 'attempt_number'):
+        op.add_column('quiz_scores', sa.Column('attempt_number', sa.Integer(), nullable=True))
+        op.execute("UPDATE quiz_scores SET attempt_number = 1 WHERE attempt_number IS NULL")
+        op.alter_column('quiz_scores', 'attempt_number', nullable=False)
+
+    # Drop old quiz_scores columns if they exist
+    for col in ('workspace_id', 'quiz_title', 'difficulty'):
+        if _column_exists('quiz_scores', col):
+            if col == 'workspace_id':
+                try:
+                    op.drop_constraint(op.f('quiz_scores_workspace_id_fkey'), 'quiz_scores', type_='foreignkey')
+                except Exception:
+                    pass
+            op.drop_column('quiz_scores', col)
+
+    # Create FK from quiz_scores.quiz_id -> quizzes.id (if not already there)
+    try:
+        op.create_foreign_key('fk_quiz_scores_quiz_id', 'quiz_scores', 'quizzes', ['quiz_id'], ['id'])
+    except Exception:
+        pass
+
+    # --- Drop old per-question columns from quizzes if they exist ---
+    for col in ('question', 'correct_answer', 'options'):
+        if _column_exists('quizzes', col):
+            op.drop_column('quizzes', col)
+
+    # --- users table: add or alter columns to match model ---
+    _safe_alter_column('users', 'hashed_password', sa.TEXT(), sa.String())
+    _safe_alter_column('users', 'phone', sa.TEXT(), sa.String())
+    _safe_alter_column('users', 'professional_title', sa.TEXT(), sa.String())
+    _safe_alter_column('users', 'education', sa.VARCHAR(), sa.Text())
+    _safe_alter_column('users', 'profile_image', sa.TEXT(), sa.String())
+
+    # Also add other model columns that may be missing
+    for col_name, col_type in [('address', sa.Text()), ('bio', sa.Text()), ('skills', sa.Text())]:
+        if not _column_exists('users', col_name):
+            op.add_column('users', sa.Column(col_name, col_type, nullable=True))
+
+    # --- workspaces: alter column types ---
+    _safe_alter_column('workspaces', 'job_name', sa.TEXT(), sa.String())
+    _safe_alter_column('workspaces', 'emoji', sa.TEXT(), sa.String())
+    _safe_alter_column('workspaces', 'color', sa.TEXT(), sa.String())
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    _safe_alter_column('workspaces', 'color', sa.String(), sa.TEXT())
+    _safe_alter_column('workspaces', 'emoji', sa.String(), sa.TEXT())
+    _safe_alter_column('workspaces', 'job_name', sa.String(), sa.TEXT())
+
+    _safe_alter_column('users', 'profile_image', sa.String(), sa.TEXT())
+    _safe_alter_column('users', 'education', sa.Text(), sa.VARCHAR())
+    _safe_alter_column('users', 'professional_title', sa.String(), sa.TEXT())
+    _safe_alter_column('users', 'phone', sa.String(), sa.TEXT())
+    _safe_alter_column('users', 'hashed_password', sa.String(), sa.TEXT())
+
+    # Re-add old quiz columns
+    if not _column_exists('quizzes', 'options'):
+        op.add_column('quizzes', sa.Column('options', postgresql.JSON(astext_type=sa.Text()), autoincrement=False, nullable=True))
+    if not _column_exists('quizzes', 'correct_answer'):
+        op.add_column('quizzes', sa.Column('correct_answer', sa.VARCHAR(), autoincrement=False, nullable=True))
+    if not _column_exists('quizzes', 'question'):
+        op.add_column('quizzes', sa.Column('question', sa.VARCHAR(), autoincrement=False, nullable=True))
+
+    if not _column_exists('quiz_scores', 'difficulty'):
+        op.add_column('quiz_scores', sa.Column('difficulty', sa.VARCHAR(), autoincrement=False, nullable=True))
+    if not _column_exists('quiz_scores', 'quiz_title'):
+        op.add_column('quiz_scores', sa.Column('quiz_title', sa.VARCHAR(), autoincrement=False, nullable=True))
+    if not _column_exists('quiz_scores', 'workspace_id'):
+        op.add_column('quiz_scores', sa.Column('workspace_id', sa.INTEGER(), autoincrement=False, nullable=True))
+        try:
+            op.create_foreign_key(op.f('quiz_scores_workspace_id_fkey'), 'quiz_scores', 'workspaces', ['workspace_id'], ['id'])
+        except Exception:
+            pass
+
+    if _column_exists('quiz_scores', 'attempt_number'):
+        op.drop_column('quiz_scores', 'attempt_number')
+    if _column_exists('quiz_scores', 'quiz_id'):
+        try:
+            op.drop_constraint('fk_quiz_scores_quiz_id', 'quiz_scores', type_='foreignkey')
+        except Exception:
+            pass
+        op.drop_column('quiz_scores', 'quiz_id')
+
+    if _table_exists('questions'):
+        op.drop_index(op.f('ix_questions_id'), table_name='questions')
+        op.drop_table('questions')
+    # ### end Alembic commands ###

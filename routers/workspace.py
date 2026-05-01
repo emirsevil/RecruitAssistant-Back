@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -6,6 +6,8 @@ from schemas.workspace import (
     WorkspaceCreate,
     WorkspaceUpdate,
     WorkspaceResponse,
+    WorkspaceCreateResponse,
+    WorkspaceCategoriesUpdate,
 )
 from schemas import quiz as quiz_schema
 from crud import quiz as quiz_crud
@@ -20,6 +22,8 @@ from crud.workspace import (
     get_workspaces_by_user,
     update_workspace,
     delete_workspace,
+    set_workspace_categories,
+    search_all_categories,
 )
 from routers.auth import get_current_user
 import models
@@ -28,21 +32,34 @@ router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
 
 # POST  /workspaces/
-@router.post("/", response_model=WorkspaceResponse, status_code=201)
-def create_new_workspace(
+@router.post("/", response_model=WorkspaceCreateResponse, status_code=201)
+async def create_new_workspace(
     workspace: WorkspaceCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Create a new workspace for the authenticated user."""
-    # Ensure user_id in the creation logic matches the current user
+    """Create a new workspace and extract + persist suggested categories from the JD."""
     workspace_data = workspace.model_dump()
     workspace_data["user_id"] = current_user.id
-    
-    # We might need a slightly different create_workspace call if the schema allows passing user_id
+
     from schemas.workspace import WorkspaceCreate
     updated_workspace = WorkspaceCreate(**workspace_data)
-    return create_workspace(db, updated_workspace)
+    db_workspace = create_workspace(db, updated_workspace)
+
+    # Extract categories from JD if provided, then persist them so both
+    # mock-interview and quizzes can read them straight from workspace.categories
+    # without a second confirmation step.
+    suggested_categories: list[str] = []
+    job_desc = workspace.job_description or ""
+    if job_desc.strip():
+        suggested_categories = await extract_skills_from_job_description(job_desc)
+        if suggested_categories:
+            set_workspace_categories(db, db_workspace.id, suggested_categories)
+            db.refresh(db_workspace)
+
+    response = WorkspaceCreateResponse.model_validate(db_workspace)
+    response.suggested_categories = suggested_categories
+    return response
 
 
 # GET  /workspaces/
@@ -106,14 +123,47 @@ def remove_workspace(
     delete_workspace(db, workspace_id)
     return None
 
+
+# PUT  /workspaces/{workspace_id}/categories
+@router.put("/{workspace_id}/categories", response_model=WorkspaceResponse)
+def confirm_workspace_categories(
+    workspace_id: int,
+    body: WorkspaceCategoriesUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Confirm and save the workspace categories (one-time after creation)."""
+    db_workspace = get_workspace(db, workspace_id)
+    if not db_workspace:
+        raise HTTPException(status_code=404, detail="Workspace bulunamadı")
+    if db_workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
+
+    if len(body.categories) > 10:
+        raise HTTPException(status_code=400, detail="En fazla 10 kategori seçilebilir")
+
+    set_workspace_categories(db, workspace_id, body.categories)
+    db.refresh(db_workspace)
+    return db_workspace
+
+
+# GET  /categories/search
+@router.get("/categories/search", response_model=list[str])
+def search_categories(
+    q: str = Query("", min_length=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Search existing categories across all workspaces for autocomplete."""
+    return search_all_categories(db, q)
+
 @router.post("/{workspace_id}/quizzes/generate", response_model=list[quiz_schema.QuizGroupResponse])
-def generate_quizzes_for_workspace(
+async def generate_quizzes_for_workspace(
     workspace_id: int, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
     """Generate quizzes for a workspace owned by the authenticated user."""
-    # Retrieve workspace to get job description
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
@@ -121,34 +171,43 @@ def generate_quizzes_for_workspace(
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
         
     job_desc = workspace.job_description or ""
-    generated = generate_quizzes_from_job_description(job_desc)
+    generated = await generate_quizzes_from_job_description(job_desc)
     
-    # Use a dictionary to group by (title, difficulty)
-    grouped_data = {}
+    quiz_groups = []
     
-    for q in generated:
-        title = q.get("title", "Technical Quiz")
-        diff = q.get("difficulty", "Medium")
+    # Process each generated group (title, difficulty, questions)
+    for g in generated:
+        title = g.get("title", "Technical Quiz")
+        diff = g.get("difficulty", "Medium")
+        questions_raw = g.get("questions", [])
         
-        quiz_data = quiz_schema.QuizCreate(
+        # 1. Create the Quiz Group Header
+        new_quiz = quiz_crud.create_quiz(db, quiz=quiz_schema.QuizBase(
             workspace_id=workspace_id,
             title=title,
+            difficulty=diff
+        ))
+        
+        # 2. Add Questions to this specific Quiz ID
+        saved_questions = []
+        for q_raw in questions_raw:
+            q_data = quiz_schema.QuestionCreate(
+                quiz_id=new_quiz.id,
+                question=q_raw.get("question", ""),
+                options=q_raw.get("options", []),
+                correct_answer=q_raw.get("correct_answer", "")
+            )
+            saved_questions.append(quiz_crud.create_question(db, question=q_data))
+            
+        quiz_groups.append(quiz_schema.QuizGroupResponse(
+            id=new_quiz.id,
+            title=title,
             difficulty=diff,
-            question=q.get("question", ""),
-            options=q.get("options", []),
-            correct_answer=q.get("correct_answer", "")
-        )
-        created = quiz_crud.create_quiz(db, quiz=quiz_data)
+            questions=saved_questions,
+            attempts_count=0
+        ))
         
-        key = (title, diff)
-        if key not in grouped_data:
-            grouped_data[key] = []
-        grouped_data[key].append(created)
-        
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
+    return quiz_groups
 
 
 @router.get("/{workspace_id}/quizzes", response_model=list[quiz_schema.QuizGroupResponse])
@@ -157,52 +216,57 @@ def list_workspace_quizzes(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Fetch all quizzes for a workspace owned by the authenticated user, grouped by topic."""
+    """Fetch all quizzes for a workspace owned by the authenticated user."""
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
     if workspace.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
         
-    quizzes = quiz_crud.list_quizzes(db=db, workspace_id=workspace_id)
+    db_quizzes = quiz_crud.list_quizzes(db=db, workspace_id=workspace_id)
     
-    # Group by title and difficulty
-    grouped_data = {}
-    for q in quizzes:
-        title = q.title or "Technical Quiz"
-        diff = q.difficulty or "Medium"
-        key = (title, diff)
-        if key not in grouped_data:
-            grouped_data[key] = []
-        grouped_data[key].append(q)
+    response_data = []
+    for q in db_quizzes:
+        attempts = quiz_crud.count_quiz_attempts(db, q.id, current_user.id)
+        response_data.append(quiz_schema.QuizGroupResponse(
+            id=q.id,
+            title=q.title,
+            difficulty=q.difficulty,
+            questions=q.questions, # Relationship will pull these
+            attempts_count=attempts
+        ))
         
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
+    return response_data
 
 
 @router.post("/{workspace_id}/skills/extract", response_model=list[str])
-def extract_workspace_skills(
-    workspace_id: int, 
+async def extract_workspace_skills(
+    workspace_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Analyze workspace JD and extract key technical skills for an owned workspace."""
+    """Analyze workspace JD and extract key technical skills for an owned workspace.
+
+    Also persists the result to workspace.categories so older workspaces (created
+    before auto-persist) self-heal on first call.
+    """
     workspace = get_workspace(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace bulunamadı")
     if workspace.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
-    
+
     job_desc = workspace.job_description or ""
     if not job_desc:
         return []
-    
-    return extract_skills_from_job_description(job_desc)
+
+    skills = await extract_skills_from_job_description(job_desc)
+    if skills:
+        set_workspace_categories(db, workspace_id, skills)
+    return skills
 
 @router.post("/{workspace_id}/quizzes/generate-targeted", response_model=list[quiz_schema.QuizGroupResponse])
-def generate_targeted_workspace_quizzes(
+async def generate_targeted_workspace_quizzes(
     workspace_id: int, 
     request: quiz_schema.TargetedQuizRequest,
     db: Session = Depends(get_db),
@@ -218,35 +282,65 @@ def generate_targeted_workspace_quizzes(
     job_desc = workspace.job_description or ""
     selections = [s.model_dump() for s in request.selections]
     
-    generated = generate_targeted_quizzes(job_desc, selections)
+    # Collect existing question texts keyed by "topic|difficulty" so the
+    # generator can instruct the LLM to avoid repeating them.
+    existing_questions: dict[str, list[str]] = {}
+    for sel in request.selections:
+        for diff in sel.difficulties:
+            key = f"{sel.title}|{diff}"
+            existing_quizzes = (
+                db.query(models.Quiz)
+                .filter(
+                    models.Quiz.workspace_id == workspace_id,
+                    models.Quiz.title == sel.title,
+                    models.Quiz.difficulty == diff,
+                )
+                .all()
+            )
+            q_texts = []
+            for eq in existing_quizzes:
+                for question in eq.questions:
+                    q_texts.append(question.question)
+            # Keep only the most recent 20 questions to avoid prompt bloat
+            if q_texts:
+                existing_questions[key] = q_texts[-20:]
     
-    grouped_data = {}
+    generated = await generate_targeted_quizzes(
+        job_desc, selections, language=request.language or "tr",
+        existing_questions=existing_questions if existing_questions else None,
+    )
     
-    for group in generated:
-        title = group.get("title", "Technical Quiz")
-        diff = group.get("difficulty", "Medium")
-        questions = group.get("questions", [])
+    quiz_groups = []
+    
+    for group_data in generated:
+        title = group_data.get("title", "Technical Quiz")
+        diff = group_data.get("difficulty", "Medium")
+        questions_raw = group_data.get("questions", [])
+        
+        # 1. Create the Quiz Group Header
+        new_quiz = quiz_crud.create_quiz(db, quiz=quiz_schema.QuizBase(
+            workspace_id=workspace_id,
+            title=title,
+            difficulty=diff
+        ))
         
         saved_questions = []
-        for q in questions:
-            quiz_data = quiz_schema.QuizCreate(
-                workspace_id=workspace_id,
-                title=title,
-                difficulty=diff,
-                question=q.get("question", ""),
-                options=q.get("options", []),
-                correct_answer=q.get("correct_answer", "")
+        for q_raw in questions_raw:
+            q_data = quiz_schema.QuestionCreate(
+                quiz_id=new_quiz.id,
+                question=q_raw.get("question", ""),
+                options=q_raw.get("options", []),
+                correct_answer=q_raw.get("correct_answer", "")
             )
-            created = quiz_crud.create_quiz(db, quiz=quiz_data)
-            saved_questions.append(created)
+            saved_questions.append(quiz_crud.create_question(db, question=q_data))
             
         if saved_questions:
-            key = (title, diff)
-            if key not in grouped_data:
-                grouped_data[key] = []
-            grouped_data[key].extend(saved_questions)
+            quiz_groups.append(quiz_schema.QuizGroupResponse(
+                id=new_quiz.id,
+                title=title,
+                difficulty=diff,
+                questions=saved_questions,
+                attempts_count=0
+            ))
     
-    return [
-        quiz_schema.QuizGroupResponse(title=title, difficulty=diff, questions=questions)
-        for (title, diff), questions in grouped_data.items()
-    ]
+    return quiz_groups

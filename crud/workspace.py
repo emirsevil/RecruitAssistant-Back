@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
-from models import Workspace
+from sqlalchemy import func as sa_func
+from models import Workspace, WorkspaceCategory
 from schemas.workspace import WorkspaceCreate, WorkspaceUpdate
-from typing import Optional
+from typing import Optional, List
 
 
 # ---------- CREATE ----------
@@ -61,3 +62,48 @@ def delete_workspace(db: Session, workspace_id: int) -> bool:
     db.delete(db_workspace)
     db.commit()
     return True
+
+
+# ---------- CATEGORIES ----------
+def set_workspace_categories(db: Session, workspace_id: int, category_names: List[str]) -> List[WorkspaceCategory]:
+    """Replace all categories for a workspace with the given list."""
+    # Delete existing
+    db.query(WorkspaceCategory).filter(WorkspaceCategory.workspace_id == workspace_id).delete()
+
+    # Insert new
+    categories = []
+    for name in category_names:
+        name = name.strip()
+        if not name:
+            continue
+        cat = WorkspaceCategory(workspace_id=workspace_id, name=name)
+        db.add(cat)
+        categories.append(cat)
+
+    db.commit()
+    for cat in categories:
+        db.refresh(cat)
+    return categories
+
+
+def get_workspace_categories(db: Session, workspace_id: int) -> List[WorkspaceCategory]:
+    """Get all categories for a workspace."""
+    return (
+        db.query(WorkspaceCategory)
+        .filter(WorkspaceCategory.workspace_id == workspace_id)
+        .order_by(WorkspaceCategory.id)
+        .all()
+    )
+
+
+def search_all_categories(db: Session, query: str, limit: int = 20) -> List[str]:
+    """Search distinct category names across all workspaces for autocomplete."""
+    results = (
+        db.query(WorkspaceCategory.name)
+        .filter(WorkspaceCategory.name.ilike(f"%{query}%"))
+        .group_by(WorkspaceCategory.name)
+        .order_by(sa_func.count(WorkspaceCategory.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [r[0] for r in results]

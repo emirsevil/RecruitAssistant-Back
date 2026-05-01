@@ -28,7 +28,7 @@ import os
 import logging
 from functools import lru_cache
 from typing import Optional
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -136,7 +136,29 @@ def get_ai_client(provider: Optional[str] = None) -> OpenAI:
     return OpenAI(**kwargs)
 
 
-def get_model_name(tier: str = "default", provider: Optional[str] = None) -> str:
+def get_async_ai_client(provider: str | None = None) -> AsyncOpenAI:
+    """
+    Return an AsyncOpenAI-compatible client configured for the given provider.
+    """
+    name = _resolve_provider(provider)
+    config = PROVIDER_REGISTRY[name]
+
+    api_key = os.getenv(config["api_key_env"], "")
+    if not api_key:
+        logger.warning(
+            "API key for provider '%s' is not set (env var: %s).",
+            name, config["api_key_env"],
+        )
+
+    kwargs = {"api_key": api_key}
+    if config["base_url"]:
+        kwargs["base_url"] = config["base_url"]
+
+    logger.info("Creating Async AI client for provider '%s'", name)
+    return AsyncOpenAI(**kwargs)
+
+
+def get_model_name(tier: str = "default", provider: str | None = None) -> str:
     """
     Return the model identifier for the given quality tier and provider.
 
