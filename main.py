@@ -63,11 +63,31 @@ def startup_event():
         db.close()
 
 # CORS — allow frontend to call the API with credentials (cookies)
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+def _get_allowed_origins() -> list[str]:
+    default_origins = {
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    }
+
+    raw_values = [
+        os.getenv("FRONTEND_URL", ""),
+        os.getenv("FRONTEND_URLS", ""),
+    ]
+
+    for raw in raw_values:
+        for origin in raw.split(","):
+            cleaned = origin.strip().strip('"').strip("'")
+            if cleaned:
+                default_origins.add(cleaned)
+
+    return sorted(default_origins)
+
+
+ALLOWED_ORIGINS = _get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

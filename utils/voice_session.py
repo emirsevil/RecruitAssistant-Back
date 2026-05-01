@@ -89,6 +89,7 @@ class VoiceInterviewSession:
         self.conversation_history: list = []
         self.qa_pairs: list = []
         self.current_candidate_transcript = ""
+        self.current_accumulated_answer = ""
         self.active_utterance_id: Optional[str] = None
         self.last_interviewer_text: Optional[str] = None
 
