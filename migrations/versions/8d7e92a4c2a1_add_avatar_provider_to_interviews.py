@@ -19,11 +19,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "interviews",
-        sa.Column("avatar_provider", sa.String(), nullable=False, server_default="rpm_cartesia"),
-    )
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    existing = {c["name"] for c in insp.get_columns("interviews")}
+    if "avatar_provider" not in existing:
+        op.add_column(
+            "interviews",
+            sa.Column("avatar_provider", sa.String(), nullable=False, server_default="rpm_cartesia"),
+        )
 
 
 def downgrade() -> None:
-    op.drop_column("interviews", "avatar_provider")
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    existing = {c["name"] for c in insp.get_columns("interviews")}
+    if "avatar_provider" in existing:
+        op.drop_column("interviews", "avatar_provider")
