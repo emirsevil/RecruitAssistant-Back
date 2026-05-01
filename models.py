@@ -158,9 +158,7 @@ class QuizScore(Base):
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler
-    # İlişkiler
     user = relationship("User", back_populates="quiz_scores")
-    workspace = relationship("Workspace", back_populates="quiz_scores")
     quiz = relationship("Quiz", back_populates="quiz_scores")
 
 # 8. REFRESH TOKEN (Oturum Yenileme Token Tablosu)

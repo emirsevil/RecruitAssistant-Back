@@ -79,6 +79,15 @@ def get_scores_by_quiz(db: Session, quiz_id: int, user_id: Optional[int] = None)
         query = query.filter(models.QuizScore.user_id == user_id)
     return query.order_by(models.QuizScore.completed_at.desc()).all()
 
+def get_scores_by_workspace(db: Session, workspace_id: int, user_id: int) -> List[models.QuizScore]:
+    return (
+        db.query(models.QuizScore)
+        .join(models.Quiz, models.QuizScore.quiz_id == models.Quiz.id)
+        .filter(models.Quiz.workspace_id == workspace_id, models.QuizScore.user_id == user_id)
+        .order_by(models.QuizScore.completed_at.desc())
+        .all()
+    )
+
 def count_quiz_attempts(db: Session, quiz_id: int, user_id: int) -> int:
     return db.query(models.QuizScore).filter(
         models.QuizScore.user_id == user_id,
