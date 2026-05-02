@@ -3,6 +3,7 @@ Core orchestrator for a single voice interview session.
 
 Manages the lifecycle of:
 - Cartesia TTS WebSocket (Sonic-3) for the existing RPM transport
+- Browser TTS fallback when Cartesia is unavailable
 - LiveAvatar FULL session keep-alive / fallback handling
 - OpenAI GPT for conversational pacing and evaluation
 - State machine for turn management and interruption handling
@@ -11,6 +12,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import uuid
 from contextlib import suppress
 from typing import Callable, Literal, Optional
@@ -37,12 +39,13 @@ else:
     print(f"[INFO] CARTESIA_API_KEY found (length: {len(CARTESIA_API_KEY)})")
 CARTESIA_STT_URL = "wss://api.cartesia.ai/stt/websocket"
 CARTESIA_TTS_URL = "wss://api.cartesia.ai/tts/websocket"
-CARTESIA_VERSION = "2025-04-16"
+CARTESIA_VERSION = "2026-03-01"
 VOICE_ID = "0f95596c-09c4-4418-99fe-5c107e0713c0"
 LIVEAVATAR_KEEPALIVE_INTERVAL_SECONDS = 45
 
 SessionState = Literal["idle", "ai_speaking", "listening", "processing", "evaluating", "done"]
 AvatarProvider = Literal["rpm_cartesia", "liveavatar_full"]
+OutputMode = Literal["cartesia_stream", "liveavatar", "browser_tts"]
 
 
 class VoiceInterviewSession:
@@ -80,6 +83,9 @@ class VoiceInterviewSession:
         self.interview_id = interview_id
         self.requested_avatar_provider = requested_avatar_provider
         self.active_avatar_provider: AvatarProvider = requested_avatar_provider
+        self.active_output_mode: OutputMode = (
+            "liveavatar" if requested_avatar_provider == "liveavatar_full" else "cartesia_stream"
+        )
         self.liveavatar_session_id = liveavatar_session_id
 
         self.state: SessionState = "idle"
@@ -99,6 +105,7 @@ class VoiceInterviewSession:
         self._stt_listener_task: Optional[asyncio.Task] = None
         self.keepalive_task: Optional[asyncio.Task] = None
         self._liveavatar_client = LiveAvatarClient()
+        self._last_tts_error: Optional[str] = None
         self._is_running = False
         self._is_wrapping_up = False
         self._completed = False
@@ -108,6 +115,8 @@ class VoiceInterviewSession:
         self.delivery_metadata: dict = {
             "initial_avatar_provider": requested_avatar_provider,
             "final_avatar_provider": requested_avatar_provider,
+            "initial_output_mode": self.active_output_mode,
+            "final_output_mode": self.active_output_mode,
             "liveavatar_session_id": liveavatar_session_id,
             "fallback_used": False,
             "fallback_reason": None,
@@ -132,10 +141,14 @@ class VoiceInterviewSession:
             return
 
         if self.active_avatar_provider == "rpm_cartesia":
-            ready = await self._ensure_tts_connected()
+            ready = await self._ensure_tts_connected(emit_error=False)
             if not ready:
-                return
+                await self._switch_to_browser_tts(
+                    self._last_tts_error or "Cartesia ses bağlantısı kurulamadı."
+                )
         elif self.liveavatar_session_id:
+            self.active_output_mode = "liveavatar"
+            self.delivery_metadata["final_output_mode"] = "liveavatar"
             self.keepalive_task = asyncio.create_task(self._keep_liveavatar_session_alive())
 
         await self.send_json(
@@ -144,6 +157,7 @@ class VoiceInterviewSession:
                 "interview_id": self.interview_id,
                 "questions": self.questions,
                 "avatar_provider": self.active_avatar_provider,
+                "output_mode": self.active_output_mode,
             }
         )
 
@@ -222,6 +236,8 @@ class VoiceInterviewSession:
         """Cancel current playback and switch to listening mode."""
         if self.state != "ai_speaking":
             return
+        if self._is_wrapping_up:
+            return
 
         await self._cancel_current_output()
 
@@ -235,7 +251,7 @@ class VoiceInterviewSession:
 
     async def handle_avatar_done_speaking(self, utterance_id: str):
         """Client acknowledgement that a LiveAvatar utterance finished."""
-        if self.active_avatar_provider != "liveavatar_full":
+        if self.active_output_mode not in ("liveavatar", "browser_tts"):
             return
         if self.state != "ai_speaking":
             return
@@ -243,9 +259,13 @@ class VoiceInterviewSession:
             return
 
         self.active_utterance_id = None
-        self.state = "listening"
-        self.current_candidate_transcript = ""
-        await self.send_json({"type": "ai_done_speaking"})
+        if self._is_wrapping_up:
+            self._is_wrapping_up = False
+            await self.send_json({"type": "ai_done_speaking", "wrap_up": True})
+        else:
+            self.state = "listening"
+            self.current_candidate_transcript = ""
+            await self.send_json({"type": "ai_done_speaking"})
 
     async def handle_avatar_output_error(self, utterance_id: Optional[str], reason: str):
         """Fallback to the existing Cartesia transport if LiveAvatar fails."""
@@ -507,7 +527,15 @@ class VoiceInterviewSession:
         self.current_candidate_transcript = ""
         self.current_accumulated_answer = ""
 
-        await self._connect_tts()
+        if self.active_avatar_provider == "rpm_cartesia":
+            ready = await self._ensure_tts_connected(emit_error=False)
+            if not ready:
+                await self._switch_to_browser_tts(
+                    self._last_tts_error or "Cartesia ses bağlantısı kurulamadı."
+                )
+        elif self.liveavatar_session_id:
+            self.active_output_mode = "liveavatar"
+            self.delivery_metadata["final_output_mode"] = "liveavatar"
 
         await self.send_json({
             "type": "session_started",
@@ -517,6 +545,8 @@ class VoiceInterviewSession:
             "current_question_index": self.current_question_index,
             "qa_pairs": self.qa_pairs,
             "conversation_history": self.conversation_history,
+            "avatar_provider": self.active_avatar_provider,
+            "output_mode": self.active_output_mode,
         })
 
         # If all questions were already answered, jump straight to evaluation.
@@ -537,22 +567,103 @@ class VoiceInterviewSession:
         })
         await self._speak_text(resume_text, question_index=self.current_question_index)
 
-    async def _ensure_tts_connected(self) -> bool:
+    async def _ensure_tts_connected(self, *, emit_error: bool = True) -> bool:
         """Ensure the Cartesia WebSocket is connected."""
         if self._tts_ws:
             state = getattr(self._tts_ws, "state", None)
             state_name = getattr(state, "name", str(state)).upper() if state is not None else ""
             if not state_name or state_name == "OPEN":
                 return True
-        return await self._connect_tts()
+        return await self._connect_tts(emit_error=emit_error)
 
-    async def _connect_tts(self) -> bool:
+    def _extract_http_status(self, exc: Exception) -> Optional[int]:
+        """Best-effort extraction of an HTTP status code from a WebSocket handshake error."""
+        for attr in ("status_code", "status"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, int):
+                return value
+
+        response = getattr(exc, "response", None)
+        if response is not None:
+            for attr in ("status_code", "status"):
+                value = getattr(response, attr, None)
+                if isinstance(value, int):
+                    return value
+
+        match = re.search(r"HTTP\s+(\d{3})", str(exc))
+        if match:
+            return int(match.group(1))
+        return None
+
+    def _format_tts_connection_error(self, exc: Exception) -> str:
+        """Translate low-level Cartesia connection failures into actionable messages."""
+        status_code = self._extract_http_status(exc)
+        if status_code == 401:
+            return "Cartesia TTS kimlik doğrulaması başarısız oldu (HTTP 401). API anahtarını kontrol edin."
+        if status_code == 402:
+            return (
+                "Cartesia TTS erişimi reddedildi (HTTP 402). "
+                "API anahtarını, planı veya kredi durumunu kontrol edin."
+            )
+        if status_code == 403:
+            return "Cartesia TTS erişimi engellendi (HTTP 403). Hesap yetkilerini kontrol edin."
+        if status_code == 429:
+            return "Cartesia TTS eşzamanlı kullanım sınırına ulaştı (HTTP 429). Biraz sonra tekrar deneyin."
+        if status_code is not None:
+            return f"Cartesia TTS bağlantısı kurulamadı (HTTP {status_code})."
+        return f"Cartesia TTS bağlantısı kurulamadı: {exc}"
+
+    def _format_tts_api_error(self, payload: dict) -> str:
+        """Normalize Cartesia runtime error payloads across API versions."""
+        title = (payload.get("title") or "").strip()
+        message = (payload.get("message") or payload.get("error") or "").strip()
+        if title and message and message != title:
+            return f"{title}: {message}"
+        if message:
+            return message
+        if title:
+            return title
+        return "Bilinmeyen Cartesia hatası"
+
+    async def _switch_to_browser_tts(self, reason: str, *, include_current_utterance: bool = False):
+        """Fallback to local browser speech synthesis when server-side TTS is unavailable."""
+        if self.active_output_mode == "browser_tts" and not include_current_utterance:
+            return
+        if self._tts_ws:
+            with suppress(Exception):
+                await self._tts_ws.close()
+        self._tts_ws = None
+        self._current_tts_context_id = None
+
+        self.active_output_mode = "browser_tts"
+        self.delivery_metadata["fallback_used"] = True
+        self.delivery_metadata["fallback_reason"] = reason
+        self.delivery_metadata["final_output_mode"] = "browser_tts"
+
+        await self.send_json({
+            "type": "error",
+            "message": f"{reason} Tarayıcı seslendirmesine geçildi.",
+            "recoverable": True,
+        })
+
+        payload = {
+            "type": "output_mode_switched",
+            "output_mode": "browser_tts",
+            "reason": reason,
+        }
+        if include_current_utterance and self.last_interviewer_text and self.active_utterance_id:
+            payload["transcript"] = self.last_interviewer_text
+            payload["utterance_id"] = self.active_utterance_id
+        await self.send_json(payload)
+
+    async def _connect_tts(self, *, emit_error: bool = True) -> bool:
         """Open WebSocket connection to Cartesia TTS (Sonic-3)."""
         if not CARTESIA_API_KEY:
             await self.send_json({"type": "error", "message": "Cartesia yapılandırması eksik."})
             return False
 
         headers = {
+            "Authorization": f"Bearer {CARTESIA_API_KEY}",
             "X-API-Key": CARTESIA_API_KEY,
             "Cartesia-Version": CARTESIA_VERSION,
         }
@@ -560,11 +671,21 @@ class VoiceInterviewSession:
         try:
             self._tts_ws = await websockets.connect(CARTESIA_TTS_URL, additional_headers=headers)
             self._tts_listener_task = asyncio.create_task(self._tts_listener())
+            self.active_output_mode = "cartesia_stream"
+            self.delivery_metadata["final_output_mode"] = "cartesia_stream"
+            self._last_tts_error = None
             print("[TTS] Connected to Cartesia Sonic-3")
             return True
         except Exception as exc:
-            print(f"[TTS] Connection error: {exc}")
-            await self.send_json({"type": "error", "message": f"TTS bağlantı hatası: {exc}"})
+            self._tts_ws = None
+            self._last_tts_error = self._format_tts_connection_error(exc)
+            print(f"[TTS] Connection error: {exc} -> {self._last_tts_error}")
+            if emit_error:
+                await self.send_json({
+                    "type": "error",
+                    "message": self._last_tts_error,
+                    "recoverable": True,
+                })
             return False
 
     async def _tts_listener(self):
@@ -581,7 +702,6 @@ class VoiceInterviewSession:
                     msg_type = data.get("type", "")
 
                     if msg_type == "chunk":
-                        # Only forward audio from the CURRENT context — drop stale chunks
                         chunk_context = data.get("context_id", "")
                         if chunk_context == self._current_tts_context_id:
                             audio_b64 = data.get("data", "")
@@ -593,32 +713,42 @@ class VoiceInterviewSession:
                         context_id = data.get("context_id", "")
                         if context_id == self._current_tts_context_id:
                             if self._is_wrapping_up:
-                                # All goodbye audio chunks sent — tell frontend
-                                # Frontend will wait for playback to finish, then send start_evaluation
                                 self._is_wrapping_up = False
                                 await self.send_json({"type": "ai_done_speaking", "wrap_up": True})
                             elif self.state == "ai_speaking":
-                                # Normal question finished — switch to listening
                                 self.state = "listening"
                                 self.current_candidate_transcript = ""
                                 await self.send_json({"type": "ai_done_speaking"})
 
                     elif msg_type == "error":
-                        err_msg = data.get("error", "Unknown Cartesia error")
+                        err_msg = self._format_tts_api_error(data)
                         err_context = data.get("context_id", "")
                         if err_context and err_context != self._current_tts_context_id:
                             print(f"[TTS] Ignoring stale error for cancelled context {err_context}: {err_msg}")
                         else:
                             print(f"[TTS] Cartesia API Error: {err_msg}")
-                            await self.send_json({"type": "error", "message": f"Ses üretim hatası (Cartesia): {err_msg}"})
+                            await self._switch_to_browser_tts(
+                                f"Cartesia ses üretimi başarısız oldu: {err_msg}",
+                                include_current_utterance=True,
+                            )
 
                 except json.JSONDecodeError:
                     pass
 
         except websockets.exceptions.ConnectionClosed:
             print("[TTS] Connection closed")
+            if self._is_running and self.state == "ai_speaking" and self.active_output_mode == "cartesia_stream":
+                await self._switch_to_browser_tts(
+                    "Cartesia bağlantısı konuşma sırasında kapandı.",
+                    include_current_utterance=True,
+                )
         except Exception as exc:
             print(f"[TTS] Listener error: {exc}")
+            if self._is_running and self.state == "ai_speaking" and self.active_output_mode == "cartesia_stream":
+                await self._switch_to_browser_tts(
+                    f"Cartesia dinleyicisi hata verdi: {exc}",
+                    include_current_utterance=True,
+                )
 
     async def _speak_text(
         self,
@@ -645,6 +775,7 @@ class VoiceInterviewSession:
         self.active_utterance_id = str(uuid.uuid4())[:20]
         self.last_interviewer_text = text
         self.delivery_metadata["final_avatar_provider"] = self.active_avatar_provider
+        self.delivery_metadata["final_output_mode"] = self.active_output_mode
 
         await self.send_json(
             {
@@ -653,19 +784,22 @@ class VoiceInterviewSession:
                 "question_index": question_index,
                 "utterance_id": self.active_utterance_id,
                 "avatar_provider": self.active_avatar_provider,
+                "output_mode": self.active_output_mode,
+                "wrap_up": self._is_wrapping_up,
             }
         )
 
-        if self.active_avatar_provider == "rpm_cartesia":
+        if self.active_output_mode == "cartesia_stream":
             await self._send_tts_request(text)
 
     async def _send_tts_request(self, text: str):
         """Send interviewer text to Cartesia for streamed playback."""
-        ready = await self._ensure_tts_connected()
+        ready = await self._ensure_tts_connected(emit_error=False)
         if not ready:
-            self.active_utterance_id = None
-            self.state = "listening"
-            await self.send_json({"type": "ai_done_speaking"})
+            await self._switch_to_browser_tts(
+                self._last_tts_error or "Cartesia ses bağlantısı kurulamadı.",
+                include_current_utterance=True,
+            )
             return
 
         self._current_tts_context_id = str(uuid.uuid4())[:20]
@@ -691,14 +825,14 @@ class VoiceInterviewSession:
         except Exception as exc:
             print(f"[TTS] Send error: {exc}")
             self._current_tts_context_id = None
-            self.active_utterance_id = None
-            self.state = "listening"
-            await self.send_json({"type": "error", "message": f"Ses üretim hatası (Cartesia): {exc}"})
-            await self.send_json({"type": "ai_done_speaking"})
+            await self._switch_to_browser_tts(
+                f"Cartesia ses aktarımı başarısız oldu: {exc}",
+                include_current_utterance=True,
+            )
 
     async def _cancel_current_output(self):
         """Cancel the active transport if there is one."""
-        if self.active_avatar_provider == "rpm_cartesia":
+        if self.active_output_mode == "cartesia_stream":
             await self._cancel_tts()
         self._current_tts_context_id = None
 
@@ -720,6 +854,8 @@ class VoiceInterviewSession:
 
         self.active_avatar_provider = "rpm_cartesia"
         self.delivery_metadata["final_avatar_provider"] = "rpm_cartesia"
+        self.active_output_mode = "cartesia_stream"
+        self.delivery_metadata["final_output_mode"] = "cartesia_stream"
 
         await self._stop_liveavatar_session("SERVER_FALLBACK")
 
@@ -731,11 +867,12 @@ class VoiceInterviewSession:
             }
         )
 
-        ready = await self._ensure_tts_connected()
+        ready = await self._ensure_tts_connected(emit_error=False)
         if not ready:
-            self.active_utterance_id = None
-            self.state = "listening"
-            await self.send_json({"type": "ai_done_speaking"})
+            await self._switch_to_browser_tts(
+                self._last_tts_error or f"{reason} Ayrıca Cartesia da kullanılamadı.",
+                include_current_utterance=True,
+            )
 
     async def _run_evaluation(self):
         """Run final evaluation using the existing evaluator."""
