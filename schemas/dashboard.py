@@ -11,7 +11,6 @@ class DashboardStatsResponse(BaseModel):
     avg_hr_score_trend: int
     avg_technical_score: int
     avg_technical_score_trend: int
-    cv_ats_score: int
 
 
 class ActivityLogResponse(BaseModel):

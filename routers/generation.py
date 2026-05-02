@@ -117,6 +117,7 @@ def api_compile_latex(
                 db_cv = db.query(CV).filter(CV.id == workspace.generated_cv_id).first()
                 if db_cv:
                     db_cv.latex_content = request.latex_content
+                    db_cv.parsed_data = request.cv_data
                     db.commit()
                     db.refresh(db_cv)
                     cv_id = db_cv.id
@@ -125,6 +126,7 @@ def api_compile_latex(
                 db_cv = CV(
                     user_id=workspace.user_id,
                     latex_content=request.latex_content,
+                    parsed_data=request.cv_data,
                     is_base_cv=False,
                 )
                 db.add(db_cv)

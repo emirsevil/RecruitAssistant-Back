@@ -40,6 +40,8 @@ class CV(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     file_url = Column(String, nullable=True)  # URL for uploaded CVs
     latex_content = Column(Text, nullable=True)  # LaTeX source for AI-generated CVs
+    parsed_data = Column(JSON, nullable=True)  # Store JSON representation of CV data
+    original_pdf_b64 = Column(Text, nullable=True)  # base64 of the originally uploaded PDF (None for DOCX uploads)
     is_base_cv = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

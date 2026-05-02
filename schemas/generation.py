@@ -130,6 +130,10 @@ class CompileLatexRequest(BaseModel):
         "cv", 
         description="Must be either 'cv' or 'cover_letter' to distinguish where it is saved."
     )
+    cv_data: Optional[dict] = Field(
+        None,
+        description="The parsed JSON data of the CV to save alongside the LaTeX"
+    )
 
 
 class CompileResponse(BaseModel):
