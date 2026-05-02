@@ -21,7 +21,7 @@ if ":" in host_port:
 else:
     host, port = host_port, "5432"
 
-CORRECT_REVISION = "2f88837e306c"
+CORRECT_REVISION = "db4f96fe3be4"
 
 conn = psycopg2.connect(host=host, port=port, dbname=dbname, user=user, password=password)
 conn.autocommit = True
