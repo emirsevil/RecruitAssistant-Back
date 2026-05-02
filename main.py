@@ -19,6 +19,7 @@ from routers.cover_letter import router as cover_letter_router
 from routers.generation import router as generation_router
 from routers.interview import router as interview_router
 from routers.voice_interview import router as voice_interview_router
+from routers.upload import router as upload_router
 from utils.auth import get_password_hash
 
 # Run database migrations before starting the app
@@ -104,6 +105,13 @@ app.include_router(cover_letter_router)
 app.include_router(generation_router)
 app.include_router(interview_router)
 app.include_router(voice_interview_router)
+app.include_router(upload_router)
+
+# Mount uploads directory
+from fastapi.staticfiles import StaticFiles
+import os
+os.makedirs("uploads/profiles", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def read_root():

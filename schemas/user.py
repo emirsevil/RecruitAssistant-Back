@@ -12,6 +12,7 @@ class UserBase(BaseModel):
     professional_title: Optional[str] = None
     skills: Optional[str] = None
     profile_image: Optional[str] = None
+    base_cv: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -25,6 +26,7 @@ class UserUpdate(BaseModel):
     professional_title: Optional[str] = None
     skills: Optional[str] = None
     profile_image: Optional[str] = None
+    base_cv: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr

@@ -18,6 +18,7 @@ class User(Base):
     education = Column(Text, nullable=True) # Replaces university with more detail
     skills = Column(Text, nullable=True)
     profile_image = Column(String, nullable=True) # URL for profile picture
+    base_cv = Column(Text, nullable=True) # Plain text extracted from base CV PDF
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler

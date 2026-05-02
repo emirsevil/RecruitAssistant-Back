@@ -202,10 +202,17 @@ def login(
     return {
         "message": "Successfully logged in",
         "user": {
+            "id": user.id,
             "email": user.email,
             "full_name": user.full_name,
-            "id": user.id,
             "education": user.education,
+            "phone": user.phone,
+            "address": user.address,
+            "bio": user.bio,
+            "professional_title": user.professional_title,
+            "skills": user.skills,
+            "profile_image": user.profile_image,
+            "base_cv": user.base_cv,
         },
     }
 
