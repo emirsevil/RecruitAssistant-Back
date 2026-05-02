@@ -45,17 +45,20 @@ def _score_trend(scores: list[int | None]) -> int:
     return recent_avg - previous_avg
 
 
-def _get_owned_completed_interviews(db: Session, user_id: int) -> list[models.Interview]:
-    return (
+def _get_owned_completed_interviews(
+    db: Session, user_id: int, workspace_id: int | None = None
+) -> list[models.Interview]:
+    query = (
         db.query(models.Interview)
         .join(models.Workspace, models.Workspace.id == models.Interview.workspace_id)
         .filter(
             models.Workspace.user_id == user_id,
             models.Interview.status == "completed",
         )
-        .order_by(models.Interview.created_at.desc())
-        .all()
     )
+    if workspace_id is not None:
+        query = query.filter(models.Interview.workspace_id == workspace_id)
+    return query.order_by(models.Interview.created_at.desc()).all()
 
 
 def _build_activity_from_logs(db: Session, user_id: int, limit: int) -> list[ActivityLogResponse]:
@@ -79,10 +82,12 @@ def _build_activity_from_logs(db: Session, user_id: int, limit: int) -> list[Act
     ]
 
 
-def _build_derived_activity(db: Session, user_id: int, limit: int) -> list[ActivityLogResponse]:
+def _build_derived_activity(
+    db: Session, user_id: int, limit: int, workspace_id: int | None = None
+) -> list[ActivityLogResponse]:
     activities: list[ActivityLogResponse] = []
 
-    interviews = _get_owned_completed_interviews(db, user_id)[:limit]
+    interviews = _get_owned_completed_interviews(db, user_id, workspace_id=workspace_id)[:limit]
     for interview in interviews:
         score_text = (
             f"Scored {interview.overall_score}%"
@@ -98,13 +103,17 @@ def _build_derived_activity(db: Session, user_id: int, limit: int) -> list[Activ
             created_at=interview.created_at,
         ))
 
-    quiz_scores = (
+    quiz_query = (
         db.query(models.QuizScore)
         .filter(models.QuizScore.user_id == user_id)
-        .order_by(models.QuizScore.completed_at.desc())
-        .limit(limit)
-        .all()
     )
+    if workspace_id is not None:
+        quiz_query = (
+            quiz_query
+            .join(models.Quiz, models.Quiz.id == models.QuizScore.quiz_id)
+            .filter(models.Quiz.workspace_id == workspace_id)
+        )
+    quiz_scores = quiz_query.order_by(models.QuizScore.completed_at.desc()).limit(limit).all()
     for score in quiz_scores:
         activities.append(ActivityLogResponse(
             id=f"quiz-score-{score.id}",
@@ -114,13 +123,13 @@ def _build_derived_activity(db: Session, user_id: int, limit: int) -> list[Activ
             created_at=score.completed_at,
         ))
 
-    cvs = (
-        db.query(models.CV)
-        .filter(models.CV.user_id == user_id)
-        .order_by(models.CV.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    # CV activity is workspace-scoped via workspace.generated_cv_id when filtering.
+    cv_query = db.query(models.CV).filter(models.CV.user_id == user_id)
+    if workspace_id is not None:
+        workspace = db.query(models.Workspace).filter(models.Workspace.id == workspace_id).first()
+        generated_cv_id = workspace.generated_cv_id if workspace else None
+        cv_query = cv_query.filter(models.CV.id == generated_cv_id) if generated_cv_id else cv_query.filter(False)
+    cvs = cv_query.order_by(models.CV.created_at.desc()).limit(limit).all()
     for cv in cvs:
         activities.append(ActivityLogResponse(
             id=f"cv-{cv.id}",
@@ -133,27 +142,32 @@ def _build_derived_activity(db: Session, user_id: int, limit: int) -> list[Activ
     return sorted(activities, key=lambda item: item.created_at, reverse=True)[:limit]
 
 
-def _get_skill_scores(db: Session, user_id: int) -> list[SkillScoreResponse]:
-    stored_scores = (
-        db.query(models.SkillScore)
-        .filter(models.SkillScore.user_id == user_id)
-        .order_by(models.SkillScore.score.asc(), models.SkillScore.updated_at.desc())
-        .limit(4)
-        .all()
-    )
-    if stored_scores:
-        return [
-            SkillScoreResponse(
-                id=f"skill-{score.id}",
-                skill_name=score.skill_name,
-                category=score.category,
-                score=score.score,
-                updated_at=score.updated_at,
-            )
-            for score in stored_scores
-        ]
+def _get_skill_scores(
+    db: Session, user_id: int, workspace_id: int | None = None
+) -> list[SkillScoreResponse]:
+    # `skill_scores` table is unused in practice (nothing writes to it) and
+    # has no workspace scoping. Skip it in workspace mode entirely.
+    if workspace_id is None:
+        stored_scores = (
+            db.query(models.SkillScore)
+            .filter(models.SkillScore.user_id == user_id)
+            .order_by(models.SkillScore.score.asc(), models.SkillScore.updated_at.desc())
+            .limit(4)
+            .all()
+        )
+        if stored_scores:
+            return [
+                SkillScoreResponse(
+                    id=f"skill-{score.id}",
+                    skill_name=score.skill_name,
+                    category=score.category,
+                    score=score.score,
+                    updated_at=score.updated_at,
+                )
+                for score in stored_scores
+            ]
 
-    quiz_groups = (
+    quiz_groups_query = (
         db.query(
             models.Quiz.title.label("quiz_title"),
             func.avg(models.QuizScore.score).label("avg_score"),
@@ -161,6 +175,11 @@ def _get_skill_scores(db: Session, user_id: int) -> list[SkillScoreResponse]:
         )
         .join(models.Quiz, models.QuizScore.quiz_id == models.Quiz.id)
         .filter(models.QuizScore.user_id == user_id)
+    )
+    if workspace_id is not None:
+        quiz_groups_query = quiz_groups_query.filter(models.Quiz.workspace_id == workspace_id)
+    quiz_groups = (
+        quiz_groups_query
         .group_by(models.Quiz.title)
         .order_by(func.avg(models.QuizScore.score).asc())
         .limit(4)
@@ -179,19 +198,23 @@ def _get_skill_scores(db: Session, user_id: int) -> list[SkillScoreResponse]:
     ]
 
 
-def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
+def get_dashboard_data(db: Session, user_id: int, workspace_id: int | None = None) -> DashboardResponse:
     now = datetime.now(timezone.utc)
     week_start = _start_of_week(now)
     next_week_start = week_start + timedelta(days=7)
     previous_week_start = week_start - timedelta(days=7)
 
+    # In workspace mode, skip the precomputed user-level progress snapshot
+    # and recompute everything from filtered raw data.
     progress = (
         db.query(models.DashboardUserProgress)
         .filter(models.DashboardUserProgress.user_id == user_id)
         .first()
+        if workspace_id is None
+        else None
     )
 
-    completed_interviews = _get_owned_completed_interviews(db, user_id)
+    completed_interviews = _get_owned_completed_interviews(db, user_id, workspace_id=workspace_id)
     this_week_interviews = [
         interview
         for interview in completed_interviews
@@ -220,7 +243,6 @@ def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
             else _average(technical_scores[:5])
         ),
         avg_technical_score_trend=_score_trend(technical_scores),
-        cv_ats_score=progress.cv_ats_score if progress else 0,
     )
 
     weekly_goal = (
@@ -232,15 +254,21 @@ def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
         .first()
     )
 
-    quizzes_actual = (
+    quizzes_actual_query = (
         db.query(models.QuizScore)
         .filter(
             models.QuizScore.user_id == user_id,
             models.QuizScore.completed_at >= week_start,
             models.QuizScore.completed_at < next_week_start,
         )
-        .count()
     )
+    if workspace_id is not None:
+        quizzes_actual_query = (
+            quizzes_actual_query
+            .join(models.Quiz, models.Quiz.id == models.QuizScore.quiz_id)
+            .filter(models.Quiz.workspace_id == workspace_id)
+        )
+    quizzes_actual = quizzes_actual_query.count()
 
     practice_events = (
         db.query(models.ScheduleEvent)
@@ -267,8 +295,11 @@ def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
         practice_minutes_actual=practice_minutes,
     )
 
-    log_activity = _build_activity_from_logs(db, user_id, limit=5)
-    derived_activity = _build_derived_activity(db, user_id, limit=5)
+    # ActivityLog rows have no workspace_id, so skip them in workspace mode.
+    log_activity = (
+        _build_activity_from_logs(db, user_id, limit=5) if workspace_id is None else []
+    )
+    derived_activity = _build_derived_activity(db, user_id, limit=5, workspace_id=workspace_id)
     activity_by_id = {item.id: item for item in [*log_activity, *derived_activity]}
     activity = sorted(activity_by_id.values(), key=lambda item: item.created_at, reverse=True)[:5]
 
@@ -286,7 +317,7 @@ def get_dashboard_data(db: Session, user_id: int) -> DashboardResponse:
     return DashboardResponse(
         stats=stats,
         activity=activity,
-        skill_scores=_get_skill_scores(db, user_id),
+        skill_scores=_get_skill_scores(db, user_id, workspace_id=workspace_id),
         weekly_goals=weekly_goals,
         upcoming_events=[
             DashboardUpcomingEventResponse(

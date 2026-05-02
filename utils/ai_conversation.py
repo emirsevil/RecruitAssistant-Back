@@ -5,6 +5,7 @@ Unlike ai_interviewer.py (generates questions upfront) and ai_evaluator.py (eval
 this module handles mid-interview dialogue — the LLM decides whether to follow up, move on, or wrap up.
 """
 import json
+from typing import Optional
 
 from utils.ai_client import get_ai_client, get_model_name
 
@@ -71,23 +72,32 @@ Görevin, aşağıdaki pozisyon için {difficulty} seviyesinde İK / Davranışs
 Pozisyon açıklaması:
 {job_description}
 
+Adayın özgeçmişi (JSON):
+{cv_summary}
+
 ZORUNLU KURALLAR:
 1. Toplamda TAM 5 soru üret.
-2. İş tanımını derinlemesine analiz et ve soruları pozisyona özel olarak tasarla.
+2. Adayın özgeçmişini DİKKATLE oku ve soruların EN AZ 3 tanesini özgeçmişteki SOMUT bilgilere dayandır:
+   - Belirli bir iş deneyimi, proje, başarı veya beceriye atıfta bulun.
+   - Örnek: "X şirketindeki Y deneyiminde karşılaştığınız en büyük zorluk neydi?"
+   - Örnek: "Z projesinde aldığınız kararı bugün yeniden alma şansınız olsa neyi farklı yapardınız?"
+   - Adayın adını veya şirket isimlerini değiştirme; özgeçmişte yazıldığı gibi kullan.
+   - Eğer özgeçmiş bilgisi boş veya yetersizse, sadece pozisyon tanımına dayalı genel davranışsal sorular üret.
+3. İş tanımını da analiz et ve soruları pozisyona özel olarak tasarla.
    - İş tanımında "hızlı tempolu ortam" geçiyorsa baskı altında çalışma sorusu sor.
    - İş tanımında "takım çalışması" veya "cross-functional" geçiyorsa işbirliği sorusu sor.
    - İş tanımında "müşteri" veya "stakeholder" geçiyorsa iletişim becerileri sorusu sor.
    - İş tanımında "liderlik" veya "mentorluk" geçiyorsa liderlik sorusu sor.
-3. Soruların odak alanları:
+4. Soruların odak alanları:
    - Kültürel uyum ve takım çalışması
    - Problem çözme ve çatışma yönetimi
    - İletişim ve liderlik becerileri
    - Motivasyon, kariyer hedefleri ve öz farkındalık
    - Uyum sağlama ve baskı altında çalışma
-4. Uygun olduğunda STAR yöntemini kullan (Durum, Görev, Aksiyon, Sonuç).
-5. Teknik veya kodlama soruları SORMA. Tamamen yumuşak beceriler, kişilik ve davranışsal yönlere odaklan.
-6. Tüm sorular Türkçe olmalı.
-7. SADECE geçerli bir JSON nesnesi döndür:
+5. Uygun olduğunda STAR yöntemini kullan (Durum, Görev, Aksiyon, Sonuç).
+6. Teknik veya kodlama soruları SORMA. Tamamen yumuşak beceriler, kişilik ve davranışsal yönlere odaklan.
+7. Tüm sorular Türkçe olmalı.
+8. SADECE geçerli bir JSON nesnesi döndür:
 {{
   "questions": [
     {{ "id": 1, "question": "Kendinizden ve kariyer hedeflerinizden bahseder misiniz?", "topic": "Motivasyon", "aiResponse": true }},
@@ -118,12 +128,18 @@ ZORUNLU KURALLAR:
 """
 
 
-def generate_turkish_questions(job_description: str, categories: str, difficulty: str, interview_type: str) -> list:
-    """Generate interview questions in Turkish — dispatches to HR or Technical prompt."""
+def generate_turkish_questions(job_description: str, categories: str, difficulty: str, interview_type: str, cv_data: Optional[dict] = None) -> list:
+    """Generate interview questions in Turkish — dispatches to HR or Technical prompt.
+
+    For HR interviews, `cv_data` (parsed CV JSON) is injected so questions reference
+    the candidate's actual experience, projects, and skills.
+    """
     if interview_type == "hr":
+        cv_summary = json.dumps(cv_data, ensure_ascii=False, indent=2) if cv_data else "(Özgeçmiş bilgisi sağlanmadı.)"
         system_prompt = HR_QUESTION_GENERATION_PROMPT.format(
             job_description=job_description,
             difficulty=difficulty,
+            cv_summary=cv_summary,
         )
     else:
         # Technical: use categories

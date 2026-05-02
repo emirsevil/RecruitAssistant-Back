@@ -311,6 +311,23 @@ async def voice_interview_websocket(
 
                     job_description = workspace.job_description
 
+                    # For HR interviews, resolve the candidate's CV (workspace's
+                    # generated CV → user's base CV). HR sessions cannot run
+                    # without one — the prompt grounds questions in the CV.
+                    cv_data = None
+                    if interview_type == "hr":
+                        from crud.cv import resolve_user_cv
+                        cv_data, _cv_source = resolve_user_cv(db, current_user.id, workspace)
+                        if cv_data is None:
+                            await send_json({
+                                "type": "error",
+                                "message": "İK mülakatı için önce CV oluşturmanız veya yüklemeniz gerekir.",
+                                "code": "MISSING_CV",
+                            })
+                            db.close()
+                            db = None
+                            continue
+
                     # Auto-cancel any stale in-progress interviews in this
                     # workspace before creating a new one. Without this, rows
                     # left behind by abandoned/refreshed sessions would pile
@@ -350,6 +367,7 @@ async def voice_interview_websocket(
                         interview_id=interview.id,
                         requested_avatar_provider=avatar_provider,
                         liveavatar_session_id=liveavatar_session_id,
+                        cv_data=cv_data,
                     )
 
                     # Start the session (async: generates questions, connects to Cartesia, speaks intro)

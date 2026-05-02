@@ -69,6 +69,7 @@ class VoiceInterviewSession:
         interview_id: int,
         requested_avatar_provider: AvatarProvider = "rpm_cartesia",
         liveavatar_session_id: Optional[str] = None,
+        cv_data: Optional[dict] = None,
     ):
         self.send_json = send_json
         self.send_binary = send_binary
@@ -81,6 +82,7 @@ class VoiceInterviewSession:
         self.requested_avatar_provider = requested_avatar_provider
         self.active_avatar_provider: AvatarProvider = requested_avatar_provider
         self.liveavatar_session_id = liveavatar_session_id
+        self.cv_data = cv_data
 
         self.state: SessionState = "idle"
         self.questions: list = []
@@ -125,6 +127,7 @@ class VoiceInterviewSession:
             self.categories,
             self.difficulty,
             self.interview_type,
+            self.cv_data,
         )
 
         if not self.questions:
