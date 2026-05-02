@@ -13,7 +13,7 @@ logging.basicConfig(
 
 import models
 from database import engine
-from routers import quiz, auth, schedule, dashboard, analytics
+from routers import quiz, auth, schedule, dashboard, analytics, cv
 from routers.workspace import router as workspace_router
 from routers.cover_letter import router as cover_letter_router
 from routers.generation import router as generation_router
@@ -99,6 +99,7 @@ app.include_router(quiz.router)
 app.include_router(schedule.router)
 app.include_router(dashboard.router)
 app.include_router(analytics.router)
+app.include_router(cv.router)
 app.include_router(workspace_router)
 app.include_router(cover_letter_router)
 app.include_router(generation_router)

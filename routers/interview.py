@@ -197,11 +197,25 @@ def generate_mock_interview(
     job_description = workspace.job_description
     categories_str = ", ".join(request.categories) if request.categories else "Genel"
 
+    # Fetch the workspace CV or fallback to Base CV
+    from models import CV
+    import json
+    db_cv = None
+    if workspace.generated_cv_id:
+        db_cv = db.query(CV).filter(CV.id == workspace.generated_cv_id).first()
+    if not db_cv:
+        db_cv = db.query(CV).filter(CV.user_id == current_user.id, CV.is_base_cv == True).first()
+        
+    cv_text = ""
+    if db_cv and db_cv.parsed_data:
+        cv_text = json.dumps(db_cv.parsed_data, ensure_ascii=False)
+
     questions = generate_interview_questions(
         job_description=job_description,
         categories=categories_str,
         difficulty=request.difficulty,
-        interview_type=request.interview_type
+        interview_type=request.interview_type,
+        cv_text=cv_text
     )
 
     if not questions:
