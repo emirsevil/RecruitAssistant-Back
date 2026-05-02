@@ -212,7 +212,6 @@ def login(
             "professional_title": user.professional_title,
             "skills": user.skills,
             "profile_image": user.profile_image,
-            "base_cv": user.base_cv,
         },
     }
 
