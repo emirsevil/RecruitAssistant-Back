@@ -347,3 +347,20 @@ def update_profile(
             detail="User not found"
         )
     return updated_user
+
+@router.delete("/account")
+def delete_account(
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: schemas.UserResponse = Depends(get_current_user)
+):
+    """Delete the currently authenticated user's account and all associated data."""
+    success = crud.delete_user(db, user_id=current_user.id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    _clear_auth_cookies(response)
+    return {"message": "Account successfully deleted"}

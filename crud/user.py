@@ -40,3 +40,12 @@ def update_user(db: Session, user_id: int, user_update: schemas.UserUpdate):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+def delete_user(db: Session, user_id: int):
+    """Delete a user and all their associated data (handled by cascades)."""
+    db_user = get_user(db, user_id)
+    if not db_user:
+        return False
+    db.delete(db_user)
+    db.commit()
+    return True

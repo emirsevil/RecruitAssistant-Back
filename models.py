@@ -21,15 +21,15 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler
-    cvs = relationship("CV", back_populates="owner")
-    workspaces = relationship("Workspace", back_populates="owner")
-    quiz_scores = relationship("QuizScore", back_populates="user")
-    refresh_tokens = relationship("RefreshToken", back_populates="user")
-    schedule_events = relationship("ScheduleEvent", back_populates="user")
-    dashboard_progress = relationship("DashboardUserProgress", back_populates="user", uselist=False)
-    activity_logs = relationship("ActivityLog", back_populates="user")
-    skill_scores = relationship("SkillScore", back_populates="user")
-    weekly_goals = relationship("WeeklyGoal", back_populates="user")
+    cvs = relationship("CV", back_populates="owner", cascade="all, delete-orphan")
+    workspaces = relationship("Workspace", back_populates="owner", cascade="all, delete-orphan")
+    quiz_scores = relationship("QuizScore", back_populates="user", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    schedule_events = relationship("ScheduleEvent", back_populates="user", cascade="all, delete-orphan")
+    dashboard_progress = relationship("DashboardUserProgress", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
+    skill_scores = relationship("SkillScore", back_populates="user", cascade="all, delete-orphan")
+    weekly_goals = relationship("WeeklyGoal", back_populates="user", cascade="all, delete-orphan")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -64,9 +64,9 @@ class Workspace(Base):
     # İlişkiler
     owner = relationship("User", back_populates="workspaces")
     generated_cv = relationship("CV", foreign_keys=[generated_cv_id], uselist=False)
-    quizzes = relationship("Quiz", back_populates="workspace")
-    interviews = relationship("Interview", back_populates="workspace")
-    cover_letters = relationship("CoverLetter", back_populates="workspace")
+    quizzes = relationship("Quiz", back_populates="workspace", cascade="all, delete-orphan")
+    interviews = relationship("Interview", back_populates="workspace", cascade="all, delete-orphan")
+    cover_letters = relationship("CoverLetter", back_populates="workspace", cascade="all, delete-orphan")
     categories = relationship("WorkspaceCategory", back_populates="workspace", cascade="all, delete-orphan")
 
 # 3.1. WORKSPACE CATEGORY (Çalışma Alanı Kategorileri)
