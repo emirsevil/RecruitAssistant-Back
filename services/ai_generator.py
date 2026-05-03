@@ -63,14 +63,12 @@ Your task is to generate a polished, accurate, targeted, one-page resume in LaTe
 - NO multi-column resume layout. Only normal document flow with left/right alignment where specified.
 
 ### LATEX ARCHITECTURE
-- Preamble: Strictly start EXACTLY with:
+- Preamble: Strictly start EXACTLY with this preamble. Use ONLY pdfLaTeX-compatible packages (no fontspec, no setmainfont) so the file compiles on Overleaf with the default pdfLaTeX engine without any configuration:
   \documentclass[11pt,a4paper]{article}
-  \usepackage{fontspec}
-  \setmainfont{texgyretermes-regular.otf}[
-    BoldFont=texgyretermes-bold.otf,
-    ItalicFont=texgyretermes-italic.otf,
-    BoldItalicFont=texgyretermes-bolditalic.otf
-  ]
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{tgtermes}
+  \renewcommand*\familydefault{\rmdefault}
   \usepackage[english, turkish]{babel}
   \usepackage[margin=1.45cm]{geometry}
   \usepackage{enumitem}
@@ -88,16 +86,35 @@ Your task is to generate a polished, accurate, targeted, one-page resume in LaTe
 - Section Headings:
   1. Left-aligned, bold, uppercase.
   2. The solid black horizontal rule must feel attached to the heading, not the body content.
-  3. Use this exact pattern for every section heading:
+  3. Use this exact pattern for every section heading (note the small post-rule gap):
      \section*{SECTION NAME}\vspace{-0.65em}
      \hrule
-     \vspace{0.45em}
-  4. Do not place body text immediately after \hrule without the larger post-rule gap.
-- Education and Experience Item Structure:
-  1. Line 1: left side organization/company in bold; right side location in normal text using \hfill.
-  2. Line 2: left side degree/job title in italics; right side dates in normal text using \hfill.
-  3. No extra vertical space between line 1 and line 2.
-  4. Use exactly two tight lines before any bullets; do not introduce line breaks or vertical margins between those two lines.
+     \vspace{0.2em}
+  4. Do not introduce extra vertical space before the first item under a section.
+- Education and Experience Item Structure (FOLLOW EXACTLY — NO VARIATIONS):
+  Each item is ALWAYS exactly two lines, in this exact LaTeX shape:
+
+      \textbf{COMPANY OR SCHOOL} \hfill LOCATION_OR_EMPTY \\
+      \textit{TITLE OR DEGREE} \hfill DATES
+
+  Concrete CORRECT example with location:
+      \textbf{Aselsan A.Ş.} \hfill Ankara, Turkey \\
+      \textit{Software Engineering Intern} \hfill Feb 2025 -- Jun 2025
+
+  Concrete CORRECT example WITHOUT location (still two lines, line 1 has no right text):
+      \textbf{Aselsan A.Ş.} \\
+      \textit{Software Engineering Intern} \hfill Feb 2025 -- Jun 2025
+
+  FORBIDDEN — DO NOT do this (title squeezed onto line 1 between company and dates):
+      \textbf{Aselsan A.Ş.} \hfill \textit{Software Engineering Intern} \hfill Feb 2025 -- Jun 2025
+
+  Rules:
+  1. The COMPANY/SCHOOL is bold and ALWAYS on line 1, left side.
+  2. The JOB TITLE / DEGREE is italic and ALWAYS on line 2, left side.
+  3. The DATES are ALWAYS on line 2, right side via \hfill.
+  4. Line 1's right side carries the LOCATION if provided, otherwise it's empty (just `\\` after the company).
+  5. NEVER place the title on line 1. NEVER center the title. NEVER use three \hfill on one line.
+  6. No extra vertical space between line 1 and line 2.
 - Bullet Points:
   1. Use standard itemize bullet lists.
   2. Keep bullets compact with snug leading.
@@ -114,6 +131,16 @@ Your task is to generate a polished, accurate, targeted, one-page resume in LaTe
   4. If categorization is useful, use technical categories only, such as `Languages: ...`, `Frameworks: ...`, `Databases: ...`, `Cloud/Tools: ...`.
 - Do not include a headline under the name unless explicitly present in the input.
 - ESCAPE CHARACTERS: Ensure `# $ % & _ { } ~ ^ \` are escaped.
+- TURKISH CHARACTERS — CRITICAL, NO EXCEPTIONS:
+  1. Copy company names, person names, school names, and any input text EXACTLY as provided. Preserve every Turkish character.
+  2. The full Turkish alphabet is: `ç Ç ğ Ğ ı I İ i ö Ö ş Ş ü Ü`. Pay extra attention to `İ` (capital dotted I), `Ş` and `ş` (S with cedilla) — these are the most commonly dropped.
+  3. CORRECT examples — copy exactly: `Aselsan A.Ş.`, `İletişim`, `TÜBİTAK`, `Forte Bilgi İletişim Teknolojileri ve Savunma Sanayi A.Ş.`, `İstanbul`, `Şirket`, `Üniversite`.
+  4. WRONG, NEVER DO THIS — never simplify, transliterate, or omit:
+     - `Aselsan A..` (missing Ş)  → must be `Aselsan A.Ş.`
+     - `letiim` (missing İ and ş) → must be `İletişim`
+     - `TÜBTAK` (missing İ) → must be `TÜBİTAK`
+     - `Sirket` (replaced Ş with S) → must be `Şirket`
+  5. Output the literal UTF-8 bytes for these characters. NEVER use LaTeX accent escapes (`\"o`, `\c{c}`, `\i`, `\u{g}`, `\v{s}`, `\.{I}`, etc.) — the preamble loads `[utf8]{inputenc}` + `[T1]{fontenc}` so raw UTF-8 renders correctly under pdfLaTeX.
 - ABSOLUTE PRIORITY: USER'S CUSTOM INSTRUCTIONS take precedence.
 - NO HALLUCINATIONS: If the candidate didn't provide a PhD, they don't have one.
 - Return ONLY raw LaTeX source. No conversational preamble. No preamble text.
@@ -142,20 +169,18 @@ Your task is to write a concise, credible, role-targeted cover letter in LaTeX t
 
 ### LATEX ARCHITECTURE (PREMIUM)
 1. **Document Class:** `\documentclass[11pt,a4paper]{article}`.
-2. **Preamble:** 
-   \usepackage{fontspec}
-   \setmainfont{texgyreheros-regular.otf}[
-     BoldFont=texgyreheros-bold.otf,
-     ItalicFont=texgyreheros-italic.otf,
-     BoldItalicFont=texgyreheros-bolditalic.otf
-   ]
+2. **Preamble (pdfLaTeX-compatible only — DO NOT use fontspec or setmainfont, those require XeLaTeX/LuaLaTeX):**
+   \usepackage[T1]{fontenc}
+   \usepackage[utf8]{inputenc}
+   \usepackage{tgheros}
+   \renewcommand*\familydefault{\sfdefault}
    \usepackage[english, turkish]{babel}
    \usepackage{parskip}
    \usepackage[hidelinks]{hyperref}
 3. **Geometry:** `\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}`.
-6. **Header:** Match the professional header style of the CV (Name, Email, etc.).
-7. **Structure:** Include the exact date provided in the user's custom instructions, recipient info, salutation, body paragraphs, professional closing, and candidate name.
-8. **Recipient Info:** Use only two recipient lines: the localized hiring-manager label and the actual target company name. Do not include a company address, address placeholder, street, city/state/ZIP placeholder, or `[Company Address]`.
+4. **Header:** Match the professional header style of the CV (Name, Email, etc.).
+5. **Structure:** Include the exact date provided in the user's custom instructions, recipient info, salutation, body paragraphs, professional closing, and candidate name.
+6. **Recipient Info:** Use only two recipient lines: the localized hiring-manager label and the actual target company name. Do not include a company address, address placeholder, street, city/state/ZIP placeholder, or `[Company Address]`.
 
 ### STRICT OUTPUT RULES
 - NO MARKDOWN: Start exactly with `\documentclass` and end with `\end{document}`. No backticks.
@@ -165,6 +190,16 @@ Your task is to write a concise, credible, role-targeted cover letter in LaTeX t
 - ZERO PLACEHOLDER RULE: The final letter must be ready to submit. Never output bracket placeholders or generic template words such as `[Recipient]`, `[Hiring Manager]`, `[Company Name]`, `[Company Address]`, `[Date]`, or `Company Name`.
 - BRACKET SAFETY: NEVER use `\\` followed immediately by a bracket `[` on the next line. This causes compilation errors. Use `\\[0pt]` or simply start a new paragraph.
 - ESCAPE CHARACTERS: Ensure `# $ % & _ { } ~ ^ \` are escaped.
+- TURKISH CHARACTERS — CRITICAL, NO EXCEPTIONS:
+  1. Copy company names, person names, school names, and any input text EXACTLY as provided. Preserve every Turkish character.
+  2. The full Turkish alphabet is: `ç Ç ğ Ğ ı I İ i ö Ö ş Ş ü Ü`. Pay extra attention to `İ` (capital dotted I), `Ş` and `ş` (S with cedilla) — these are the most commonly dropped.
+  3. CORRECT examples — copy exactly: `Aselsan A.Ş.`, `İletişim`, `TÜBİTAK`, `Forte Bilgi İletişim Teknolojileri ve Savunma Sanayi A.Ş.`, `İstanbul`, `Şirket`, `Üniversite`.
+  4. WRONG, NEVER DO THIS — never simplify, transliterate, or omit:
+     - `Aselsan A..` (missing Ş)  → must be `Aselsan A.Ş.`
+     - `letiim` (missing İ and ş) → must be `İletişim`
+     - `TÜBTAK` (missing İ) → must be `TÜBİTAK`
+     - `Sirket` (replaced Ş with S) → must be `Şirket`
+  5. Output the literal UTF-8 bytes for these characters. NEVER use LaTeX accent escapes (`\"o`, `\c{c}`, `\i`, `\u{g}`, `\v{s}`, `\.{I}`, etc.) — the preamble loads `[utf8]{inputenc}` + `[T1]{fontenc}` so raw UTF-8 renders correctly under pdfLaTeX.
 - Return ONLY the final LaTeX source code. No conversational preamble.
 """
 
@@ -195,6 +230,19 @@ def _build_output_language_instruction(output_language: Optional[str], document_
     ]
 
     if language == "Turkish":
+        common_turkish_localizations = (
+            "Localize country and place names that have standard Turkish forms. "
+            "MUST translate: `Turkey` → `Türkiye`, `Istanbul` → `İstanbul`, `Ankara` → `Ankara`, "
+            "`Izmir` → `İzmir`, `Germany` → `Almanya`, `France` → `Fransa`, `England` → `İngiltere`, "
+            "`United Kingdom` → `Birleşik Krallık`, `United States` → `Amerika Birleşik Devletleri` (or `ABD`), "
+            "`Netherlands` → `Hollanda`, `China` → `Çin`, `Taiwan` → `Tayvan`, `Japan` → `Japonya`. "
+            "Apply the same to language names: `English` → `İngilizce`, `Turkish` → `Türkçe`, "
+            "`German` → `Almanca`, `Chinese` → `Çince`. Apply also to month names in dates: "
+            "`January` → `Ocak`, `February` → `Şubat`, `March` → `Mart`, `April` → `Nisan`, "
+            "`May` → `Mayıs`, `June` → `Haziran`, `July` → `Temmuz`, `August` → `Ağustos`, "
+            "`September` → `Eylül`, `October` → `Ekim`, `November` → `Kasım`, `December` → `Aralık`, "
+            "and `Present` → `Devam ediyor`."
+        )
         if document_type == "cover_letter":
             language_rules = [
                 "Use natural professional Turkish throughout the letter.",
@@ -202,11 +250,13 @@ def _build_output_language_instruction(output_language: Optional[str], document_
                 "Use Turkish greeting and closing text, for example `Sayın İşe Alım Yetkilisi,` and `Saygılarımla,` unless a more specific recipient is provided.",
                 "Localize every address, location, recipient, salutation, and closing label into Turkish. Omit unknown address lines instead of using English labels or placeholders.",
                 "Use the exact date supplied in the user's custom instructions; if it is supplied in Turkish, keep it in Turkish.",
+                common_turkish_localizations,
             ]
         else:
             language_rules = [
                 "Use Turkish section headings where those sections appear: ÖZET, YETENEKLER, DENEYİM, PROJELER, EĞİTİM.",
                 "Use natural Turkish for summaries, bullets, dates, and section content while preserving factual details from the profile.",
+                common_turkish_localizations,
             ]
     else:
         if document_type == "cover_letter":
@@ -325,19 +375,59 @@ def _sanitize_cover_letter_latex(latex_content: str) -> str:
         if content.endswith("```"):
             content = content[:-3].strip()
 
-    match = re.search(r"(\\documentclass.*\\end\{document\})", content, re.DOTALL)
+    # Capture the optional Overleaf TeX-program magic comment that may sit just before \documentclass.
+    match = re.search(
+        r"((?:^[ \t]*%[ \t]*!TEX[^\n]*\n)?\\documentclass.*\\end\{document\})",
+        content,
+        re.DOTALL | re.MULTILINE,
+    )
     if match:
         content = match.group(1).strip()
 
     cleaned_lines = []
     for line in content.splitlines():
+        # Keep TeX magic comments (`%!TEX ...`) so Overleaf picks the right engine.
+        if re.match(r"^\s*%[ \t]*!TEX\b", line):
+            cleaned_lines.append(line.rstrip())
+            continue
         if re.match(r"^\s*\\?%", line):
             continue
         cleaned_lines.append(re.sub(r"(?<!\\)%.*$", "", line).rstrip())
 
     content = "\n".join(cleaned_lines)
     content = re.sub(r"\n{3,}", "\n\n", content)
-    return content.strip()
+    content = content.strip()
+
+    # Safety net: if the LLM still emits fontspec (which only works under
+    # xelatex/lualatex), prepend the Overleaf magic comment so users don't
+    # have to switch the compiler manually. The prompt now requests pdflatex-
+    # compatible packages, so this branch should rarely fire.
+    if r"\usepackage{fontspec}" in content and not re.match(r"^\s*%[ \t]*!TEX\b", content):
+        content = "%!TEX TS-program = xelatex\n" + content
+
+    content = _escape_problem_turkish_chars(content)
+    return content
+
+
+# Latin Extended-A Turkish characters that pdfLaTeX with [utf8]{inputenc}
+# + tgtermes/tgheros silently DROPS (they fall outside the T1 glyph subset
+# the font ships). We translate them to LaTeX accent commands which the
+# kernel always renders correctly, regardless of font or engine.
+_TURKISH_CHAR_ESCAPES = {
+    "İ": r"\.{I}",
+    "Ş": r"\c{S}",
+    "ş": r"\c{s}",
+    "Ğ": r"\u{G}",
+    "ğ": r"\u{g}",
+    "ı": r"\i{}",
+}
+
+
+def _escape_problem_turkish_chars(content: str) -> str:
+    """Replace Latin Extended-A Turkish chars with LaTeX escapes that always render."""
+    for char, escape in _TURKISH_CHAR_ESCAPES.items():
+        content = content.replace(char, escape)
+    return content
 
 
 def _normalize_resume_section_dividers(latex_content: str) -> str:
@@ -349,7 +439,7 @@ def _normalize_resume_section_dividers(latex_content: str) -> str:
         r"(?:\\vspace\{[^{}]+\}\s*)?"
     )
     return section_heading_pattern.sub(
-        lambda match: f"{match.group(1)}\\vspace{{-0.65em}}\n\\hrule\n\\vspace{{0.45em}}\n",
+        lambda match: f"{match.group(1)}\\vspace{{-0.65em}}\n\\hrule\n\\vspace{{0.2em}}\n",
         latex_content,
     )
 
@@ -509,6 +599,7 @@ def _prepare_latex_for_compilation(latex_content: str) -> str:
     # Brackets after \\ are interpreted as optional spacing arguments.
     content = re.sub(r"\\\\\s*\n\s*\[", r"\\\\[0pt]\n[", content)
     content = _normalize_resume_section_dividers(content)
+    content = _escape_problem_turkish_chars(content)
 
     return content
 
