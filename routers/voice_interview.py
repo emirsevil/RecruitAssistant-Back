@@ -7,6 +7,7 @@ Handles:
 - Binary audio forwarding (microphone PCM data from frontend)
 - Session creation with database interaction
 """
+import asyncio
 import json
 import os
 import time
@@ -180,6 +181,7 @@ async def voice_interview_websocket(
     db: Optional[Session] = None
     interview_id: Optional[int] = None
     session_start_time: Optional[float] = None
+    duration_limit_task: Optional[asyncio.Task] = None
 
     async def send_json(data: dict):
         """Send a JSON message to the client."""
@@ -280,6 +282,9 @@ async def voice_interview_websocket(
                     interview_type = data.get("interview_type", "hr")
                     avatar_provider = data.get("avatar_provider", "rpm_cartesia")
                     liveavatar_session_id = data.get("liveavatar_session_id")
+                    # Duration limit in seconds (default 10 min, max 30 min, min 60s)
+                    raw_duration = data.get("duration_limit")
+                    duration_limit = min(max(int(raw_duration or 600), 60), 1800)
 
                     if avatar_provider == "liveavatar_full" and not liveavatar_session_id:
                         await send_json({
@@ -373,6 +378,29 @@ async def voice_interview_websocket(
                     # Start the session (async: generates questions, connects to Cartesia, speaks intro)
                     await session.start()
 
+                    # Server-side duration limit enforcement.
+                    # The FRONTEND tracks fair "listening-only" time (pauses during
+                    # AI speaking / processing). This backend guard is a hard
+                    # wall-clock safety net at 2× the user-selected duration to
+                    # prevent runaway sessions even if the client misbehaves.
+                    hard_limit = duration_limit * 2
+
+                    async def _duration_guard(limit_secs: int):
+                        """Auto-end the interview after the hard wall-clock limit."""
+                        await asyncio.sleep(limit_secs)
+                        if session and session.state not in ("evaluating", "done"):
+                            print(f"[WS] Hard duration limit reached ({limit_secs}s wall-clock) — ending session.")
+                            await send_json({
+                                "type": "error",
+                                "message": "Süre doldu. Mülakat sona erdiriliyor.",
+                                "recoverable": False,
+                            })
+                            await session.end_session()
+                            await session.wait_for_evaluation()
+                            await _save_session_to_db(session, db, interview_id, session_start_time)
+
+                    duration_limit_task = asyncio.create_task(_duration_guard(hard_limit))
+
                 elif msg_type == "interrupt":
                     if session:
                         await session.handle_interrupt()
@@ -400,6 +428,8 @@ async def voice_interview_websocket(
 
                 elif msg_type == "end_session":
                     if session:
+                        if duration_limit_task and not duration_limit_task.done():
+                            duration_limit_task.cancel()
                         await session.end_session()
                         await session.wait_for_evaluation()
                         await _save_session_to_db(session, db, interview_id, session_start_time)
@@ -407,6 +437,8 @@ async def voice_interview_websocket(
                 elif msg_type == "start_evaluation":
                     # Frontend signals that goodbye audio playback finished
                     if session:
+                        if duration_limit_task and not duration_limit_task.done():
+                            duration_limit_task.cancel()
                         await session._run_evaluation()
                         await _save_session_to_db(session, db, interview_id, session_start_time)
 
@@ -452,6 +484,8 @@ async def voice_interview_websocket(
             pass
     finally:
         # Cleanup
+        if duration_limit_task and not duration_limit_task.done():
+            duration_limit_task.cancel()
         if session:
             await session.cleanup()
         if db:
