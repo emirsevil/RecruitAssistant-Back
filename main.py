@@ -68,6 +68,7 @@ def _get_allowed_origins() -> list[str]:
     default_origins = {
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://recruitassistant-front-1.onrender.com",
     }
 
     raw_values = [
