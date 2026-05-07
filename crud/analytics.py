@@ -276,7 +276,7 @@ def _mode_split(
             continue
         if iv.overall_score is None:
             continue
-        if (iv.mode or "text") == "voice":
+        if (iv.mode or "text") == "avatar":
             voice_scores.append(iv.overall_score)
         else:
             text_scores.append(iv.overall_score)

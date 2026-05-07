@@ -100,7 +100,7 @@ def get_interview_detail(
         except json.JSONDecodeError:
             pass
 
-    if iv.mode == "voice":
+    if iv.mode in ("voice", "avatar"):
         # Voice mode: feedback has {qa_pairs, conversation_history, results, overall_score, overall_feedback}
         qa_pairs = feedback_data.get("qa_pairs", [])
         eval_results = feedback_data.get("results", [])

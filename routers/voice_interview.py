@@ -353,7 +353,7 @@ async def voice_interview_websocket(
                         transcript="[voice_session_started]",
                         difficulty=difficulty,
                         categories=categories,
-                        mode="voice",
+                        mode="avatar" if avatar_provider == "liveavatar_full" else "voice",
                         status="in_progress",
                         avatar_provider=avatar_provider,
                     )
