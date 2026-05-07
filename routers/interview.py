@@ -180,19 +180,35 @@ def get_interview_detail(
 
 @router.post("/generate", response_model=MockInterviewResponse)
 def generate_mock_interview(
-    request: MockInterviewRequest, 
+    request: MockInterviewRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     workspace = get_workspace(db, request.workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
+
     if workspace.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
 
     if not workspace.job_description:
         raise HTTPException(status_code=400, detail="Workspace does not have a job description")
+
+    # ── DEMO MODE: 1 interview per workspace ───────────────────────
+    existing_interviews = (
+        db.query(Interview)
+        .filter(
+            Interview.workspace_id == request.workspace_id,
+            Interview.status != "cancelled",
+        )
+        .count()
+    )
+    if existing_interviews >= 1:
+        raise HTTPException(
+            status_code=403,
+            detail="DEMO_INTERVIEW_LIMIT_REACHED",
+        )
+    # ── END DEMO MODE ──────────────────────────────────────────────
 
     job_description = workspace.job_description
     categories_str = ", ".join(request.categories) if request.categories else "Genel"

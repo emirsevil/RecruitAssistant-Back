@@ -155,6 +155,12 @@ async def get_current_user_ws(websocket: WebSocket, db: Session = Depends(get_db
 @router.post("/register", response_model=schemas.UserResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """API endpoint to register a new user."""
+    # ── DEMO MODE: registration disabled for the CS fair ───────────
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="DEMO_REGISTRATION_DISABLED",
+    )
+    # ── END DEMO MODE ──────────────────────────────────────────────
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(

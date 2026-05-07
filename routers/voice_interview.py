@@ -345,6 +345,27 @@ async def voice_interview_websocket(
                     except Exception as e:
                         print(f"[WS] auto-cancel stale in_progress failed: {e}")
 
+                    # ── DEMO MODE: 1 interview per workspace ───────────
+                    from models import Interview as _Interview
+                    existing_iv = (
+                        db.query(_Interview)
+                        .filter(
+                            _Interview.workspace_id == workspace_id,
+                            _Interview.status != "cancelled",
+                        )
+                        .count()
+                    )
+                    if existing_iv >= 1:
+                        await send_json({
+                            "type": "error",
+                            "message": "Demo mode: only 1 interview allowed per workspace.",
+                            "code": "DEMO_INTERVIEW_LIMIT_REACHED",
+                        })
+                        db.close()
+                        db = None
+                        continue
+                    # ── END DEMO MODE ──────────────────────────────────
+
                     # Create interview record in DB with full metadata
                     interview = create_interview(
                         db=db,
