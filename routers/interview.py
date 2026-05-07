@@ -194,13 +194,10 @@ def generate_mock_interview(
     if not workspace.job_description:
         raise HTTPException(status_code=400, detail="Workspace does not have a job description")
 
-    # ── DEMO MODE: 1 interview per workspace ───────────────────────
+    # ── DEMO MODE: 1 interview per workspace (any status) ─────────
     existing_interviews = (
         db.query(Interview)
-        .filter(
-            Interview.workspace_id == request.workspace_id,
-            Interview.status != "cancelled",
-        )
+        .filter(Interview.workspace_id == request.workspace_id)
         .count()
     )
     if existing_interviews >= 1:

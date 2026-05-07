@@ -47,26 +47,6 @@ SADECE geçerli bir JSON nesnesi döndür:
 }}
 """
 
-INTRO_SYSTEM_PROMPT = """
-Sen profesyonel bir mülakat yapay zekasısın. Türkçe konuşuyorsun.
-Mülakata başlarken adayı sıcak bir şekilde karşıla; KİŞİSEL BİR İSİM KULLANMA.
-Kendini "bugünkü mülakatınızı yürütecek mülakatçı" olarak tanıt
-("Ben Deniz", "Adım ..." gibi ifadeler KULLANMA).
-Ardından doğrudan ilk soruyu sor.
-
-Kısa ve doğal ol — 2-3 cümle yeterli.
-
-Pozisyon açıklaması:
-{job_description}
-
-Zorluk seviyesi: {difficulty}
-Mülakat türü: {interview_type}
-
-İlk soru: {first_question}
-
-SADECE mülakatçının söyleyeceği Türkçe metni döndür, başka bir şey yazma.
-"""
-
 HR_QUESTION_GENERATION_PROMPT = """
 Sen uzman bir İK mülakatçısın. Davranışsal ve durumsal mülakat sorularında uzmanlaşmışsın.
 Görevin, aşağıdaki pozisyon için {difficulty} seviyesinde İK / Davranışsal mülakat soruları üretmek.
@@ -180,29 +160,14 @@ def generate_turkish_questions(job_description: str, categories: str, difficulty
         return []
 
 
-def generate_intro_text(job_description: str, difficulty: str, interview_type: str, first_question: str) -> str:
-    """Generate the interviewer's opening statement in Turkish."""
-    system_prompt = INTRO_SYSTEM_PROMPT.format(
-        job_description=job_description,
-        difficulty=difficulty,
-        interview_type=interview_type,
-        first_question=first_question
-    )
+def generate_intro_text(_job_description: str, _difficulty: str, _interview_type: str, first_question: str) -> str:
+    """Return the interviewer's opening statement in Turkish.
 
-    try:
-        client = get_ai_client()
-        model = get_model_name(tier="fast")
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Mülakata başla."}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error generating intro: {e}")
-        return f"Merhaba, mülakata hoş geldiniz. İlk sorumuz: {first_question}"
+    Uses a fixed, role-based greeting (no personal name) so the wording is
+    consistent across sessions and doesn't drift with the LLM. The first
+    question is appended so the candidate can start answering immediately.
+    """
+    return f"Merhaba! Bugün sizinle bu mülakatı ben yapacağım. {first_question}"
 
 
 def generate_interviewer_response(

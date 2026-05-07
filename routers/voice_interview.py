@@ -345,14 +345,11 @@ async def voice_interview_websocket(
                     except Exception as e:
                         print(f"[WS] auto-cancel stale in_progress failed: {e}")
 
-                    # ── DEMO MODE: 1 interview per workspace ───────────
+                    # ── DEMO MODE: 1 interview per workspace (any status) ──
                     from models import Interview as _Interview
                     existing_iv = (
                         db.query(_Interview)
-                        .filter(
-                            _Interview.workspace_id == workspace_id,
-                            _Interview.status != "cancelled",
-                        )
+                        .filter(_Interview.workspace_id == workspace_id)
                         .count()
                     )
                     if existing_iv >= 1:
