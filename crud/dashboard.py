@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from typing import Iterable, Optional, Union, List
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -26,14 +26,14 @@ def _start_of_week(now: datetime) -> datetime:
     return start.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def _average(values: Iterable[int | None]) -> int:
+def _average(values: Iterable[Optional[int]]) -> int:
     clean_values = [value for value in values if value is not None]
     if not clean_values:
         return 0
     return round(sum(clean_values) / len(clean_values))
 
 
-def _score_trend(scores: list[int | None]) -> int:
+def _score_trend(scores: List[Optional[int]]) -> int:
     clean_scores = [score for score in scores if score is not None]
     if len(clean_scores) < 2:
         return 0
@@ -46,8 +46,8 @@ def _score_trend(scores: list[int | None]) -> int:
 
 
 def _get_owned_completed_interviews(
-    db: Session, user_id: int, workspace_id: int | None = None
-) -> list[models.Interview]:
+    db: Session, user_id: int, workspace_id: Optional[int] = None
+) -> List[models.Interview]:
     query = (
         db.query(models.Interview)
         .join(models.Workspace, models.Workspace.id == models.Interview.workspace_id)
@@ -83,9 +83,9 @@ def _build_activity_from_logs(db: Session, user_id: int, limit: int) -> list[Act
 
 
 def _build_derived_activity(
-    db: Session, user_id: int, limit: int, workspace_id: int | None = None
-) -> list[ActivityLogResponse]:
-    activities: list[ActivityLogResponse] = []
+    db: Session, user_id: int, limit: int, workspace_id: Optional[int] = None
+) -> List[ActivityLogResponse]:
+    activities: List[ActivityLogResponse] = []
 
     interviews = _get_owned_completed_interviews(db, user_id, workspace_id=workspace_id)[:limit]
     for interview in interviews:
@@ -143,8 +143,8 @@ def _build_derived_activity(
 
 
 def _get_skill_scores(
-    db: Session, user_id: int, workspace_id: int | None = None
-) -> list[SkillScoreResponse]:
+    db: Session, user_id: int, workspace_id: Optional[int] = None
+) -> List[SkillScoreResponse]:
     # `skill_scores` table is unused in practice (nothing writes to it) and
     # has no workspace scoping. Skip it in workspace mode entirely.
     if workspace_id is None:
@@ -198,7 +198,7 @@ def _get_skill_scores(
     ]
 
 
-def get_dashboard_data(db: Session, user_id: int, workspace_id: int | None = None) -> DashboardResponse:
+def get_dashboard_data(db: Session, user_id: int, workspace_id: Optional[int] = None) -> DashboardResponse:
     now = datetime.now(timezone.utc)
     week_start = _start_of_week(now)
     next_week_start = week_start + timedelta(days=7)

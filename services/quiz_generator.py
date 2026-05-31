@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from utils.ai_client import get_ai_client, get_model_name
 
@@ -54,7 +54,7 @@ async def extract_skills_from_job_description(job_desc: str) -> List[str]:
             logger.debug(f"Raw content that failed to parse: {content}")
         return []
 
-async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], language: str = "tr", existing_questions: Dict[str, List[str]] | None = None) -> List[Dict]:
+async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], language: str = "tr", existing_questions: Optional[Dict[str, List[str]]] = None) -> List[Dict]:
     """
     Generates quizzes for specific skills and difficulties in parallel.
     'selections' is a list of { "title": "SkillName", "difficulties": ["Easy", "Medium"] }
@@ -74,7 +74,7 @@ async def generate_targeted_quizzes(job_desc: str, selections: List[Dict], langu
     if language.lower() == "tr":
         lang_instruction += " (Türkçe karakterleri düzgün kullan)."
 
-    async def _generate_single_quiz(skill_name: str, diff: str, avoid_questions: List[str] | None = None) -> List[Dict]:
+    async def _generate_single_quiz(skill_name: str, diff: str, avoid_questions: Optional[List[str]] = None) -> List[Dict]:
         """Helper to generate a single quiz group for one skill/difficulty."""
         logger.info(f"Generating {diff} quiz for {skill_name} in parallel...")
         
