@@ -20,6 +20,7 @@ from routers.generation import router as generation_router
 from routers.interview import router as interview_router
 from routers.voice_interview import router as voice_interview_router
 from routers.upload import router as upload_router
+from routers.simulation import router as simulation_router
 from utils.auth import get_password_hash
 
 # Run database migrations before starting the app
@@ -107,6 +108,7 @@ app.include_router(generation_router)
 app.include_router(interview_router)
 app.include_router(voice_interview_router)
 app.include_router(upload_router)
+app.include_router(simulation_router)
 
 # Mount uploads directory
 from fastapi.staticfiles import StaticFiles

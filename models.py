@@ -30,6 +30,7 @@ class User(Base):
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
     skill_scores = relationship("SkillScore", back_populates="user", cascade="all, delete-orphan")
     weekly_goals = relationship("WeeklyGoal", back_populates="user", cascade="all, delete-orphan")
+    interview_feedbacks = relationship("InterviewFeedback", back_populates="user", cascade="all, delete-orphan")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -61,6 +62,12 @@ class Workspace(Base):
     generated_cv_id = Column(Integer, ForeignKey("cvs.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Simulation pipeline fields
+    simulation_stage = Column(String, nullable=False, default="cv_preparation")  # cv_preparation | interview_cycle | completed
+    cv_completed = Column(Boolean, default=False)
+    cover_letter_completed = Column(Boolean, default=False)
+    target_interview_count = Column(Integer, default=3, nullable=False)
+
     # İlişkiler
     owner = relationship("User", back_populates="workspaces")
     generated_cv = relationship("CV", foreign_keys=[generated_cv_id], uselist=False)
@@ -68,6 +75,7 @@ class Workspace(Base):
     interviews = relationship("Interview", back_populates="workspace", cascade="all, delete-orphan")
     cover_letters = relationship("CoverLetter", back_populates="workspace", cascade="all, delete-orphan")
     categories = relationship("WorkspaceCategory", back_populates="workspace", cascade="all, delete-orphan")
+    feedbacks = relationship("InterviewFeedback", back_populates="workspace", cascade="all, delete-orphan")
 
 # 3.1. WORKSPACE CATEGORY (Çalışma Alanı Kategorileri)
 class WorkspaceCategory(Base):
@@ -248,3 +256,31 @@ class WeeklyGoal(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="weekly_goals")
+
+# 13. INTERVIEW FEEDBACK (Gerçek mülakat geri bildirimi)
+class InterviewFeedback(Base):
+    __tablename__ = "interview_feedbacks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Gerçek mülakat bilgileri
+    real_interview_date = Column(DateTime(timezone=True), nullable=True)
+    real_interview_type = Column(String, nullable=True)  # "hr", "technical", "behavioral", "case_study"
+    company_questions = Column(Text, nullable=True)  # Sorulan sorular (serbest metin)
+
+    # Uygulama feedback'i
+    app_helpful_rating = Column(Integer, nullable=True)  # 1-5
+    preparation_rating = Column(Integer, nullable=True)  # 1-5
+    what_helped_most = Column(Text, nullable=True)
+    what_to_improve = Column(Text, nullable=True)
+    additional_notes = Column(Text, nullable=True)
+
+    # Mülakat sonucu
+    interview_result = Column(String, nullable=True)  # "passed", "failed", "pending"
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    workspace = relationship("Workspace", back_populates="feedbacks")
+    user = relationship("User", back_populates="interview_feedbacks")

@@ -34,6 +34,10 @@ class WorkspaceResponse(WorkspaceBase):
     generated_cv_id: Optional[int] = None
     created_at: datetime
     categories: List[WorkspaceCategoryResponse] = []
+    simulation_stage: str = "cv_preparation"
+    cv_completed: bool = False
+    cover_letter_completed: bool = False
+    target_interview_count: int = 3
 
     model_config = {"from_attributes": True}
 
