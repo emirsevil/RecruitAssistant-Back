@@ -25,6 +25,8 @@ from utils.liveavatar_client import LiveAvatarClient, LiveAvatarConfigError, Liv
 from routers.auth import get_current_user, get_current_user_ws
 import models
 
+ADMIN_EMAIL = "e@gmail.com"
+
 router = APIRouter(tags=["Voice Interview"])
 
 # NOTE: This OpenAI client is used ONLY for Whisper STT (speech-to-text).
@@ -346,24 +348,25 @@ async def voice_interview_websocket(
                         print(f"[WS] auto-cancel stale in_progress failed: {e}")
 
                     # ── DEMO MODE: 1 interview per workspace ───────────
-                    from models import Interview as _Interview
-                    existing_iv = (
-                        db.query(_Interview)
-                        .filter(
-                            _Interview.workspace_id == workspace_id,
-                            _Interview.status != "cancelled",
+                    if current_user.email != ADMIN_EMAIL:
+                        from models import Interview as _Interview
+                        existing_iv = (
+                            db.query(_Interview)
+                            .filter(
+                                _Interview.workspace_id == workspace_id,
+                                _Interview.status != "cancelled",
+                            )
+                            .count()
                         )
-                        .count()
-                    )
-                    if existing_iv >= 1:
-                        await send_json({
-                            "type": "error",
-                            "message": "Demo mode: only 1 interview allowed per workspace.",
-                            "code": "DEMO_INTERVIEW_LIMIT_REACHED",
-                        })
-                        db.close()
-                        db = None
-                        continue
+                        if existing_iv >= 1:
+                            await send_json({
+                                "type": "error",
+                                "message": "Demo mode: only 1 interview allowed per workspace.",
+                                "code": "DEMO_INTERVIEW_LIMIT_REACHED",
+                            })
+                            db.close()
+                            db = None
+                            continue
                     # ── END DEMO MODE ──────────────────────────────────
 
                     # Create interview record in DB with full metadata

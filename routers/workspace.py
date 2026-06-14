@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+ADMIN_EMAIL = "e@gmail.com"
+
 from database import get_db
 from schemas.workspace import (
     WorkspaceCreate,
@@ -40,16 +42,17 @@ async def create_new_workspace(
 ):
     """Create a new workspace and extract + persist suggested categories from the JD."""
     # ── DEMO MODE: 1 workspace per user ────────────────────────────
-    existing_workspaces = (
-        db.query(models.Workspace)
-        .filter(models.Workspace.user_id == current_user.id)
-        .count()
-    )
-    if existing_workspaces >= 1:
-        raise HTTPException(
-            status_code=403,
-            detail="DEMO_WORKSPACE_LIMIT_REACHED",
+    if current_user.email != ADMIN_EMAIL:
+        existing_workspaces = (
+            db.query(models.Workspace)
+            .filter(models.Workspace.user_id == current_user.id)
+            .count()
         )
+        if existing_workspaces >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="DEMO_WORKSPACE_LIMIT_REACHED",
+            )
     # ── END DEMO MODE ──────────────────────────────────────────────
     workspace_data = workspace.model_dump()
     workspace_data["user_id"] = current_user.id
@@ -183,16 +186,17 @@ async def generate_quizzes_for_workspace(
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
 
     # ── DEMO MODE: 3 quizzes per workspace ─────────────────────────
-    existing_quizzes = (
-        db.query(models.Quiz)
-        .filter(models.Quiz.workspace_id == workspace_id)
-        .count()
-    )
-    if existing_quizzes >= 3:
-        raise HTTPException(
-            status_code=403,
-            detail="DEMO_QUIZ_LIMIT_REACHED",
+    if current_user.email != ADMIN_EMAIL:
+        existing_quizzes = (
+            db.query(models.Quiz)
+            .filter(models.Quiz.workspace_id == workspace_id)
+            .count()
         )
+        if existing_quizzes >= 3:
+            raise HTTPException(
+                status_code=403,
+                detail="DEMO_QUIZ_LIMIT_REACHED",
+            )
     # ── END DEMO MODE ──────────────────────────────────────────────
 
     job_desc = workspace.job_description or ""
@@ -305,17 +309,18 @@ async def generate_targeted_workspace_quizzes(
         raise HTTPException(status_code=403, detail="Bu workspace'e erişim yetkiniz yok")
 
     # ── DEMO MODE: 3 quizzes per workspace ─────────────────────────
-    existing_quizzes = (
-        db.query(models.Quiz)
-        .filter(models.Quiz.workspace_id == workspace_id)
-        .count()
-    )
-    new_quiz_count = sum(len(sel.difficulties) for sel in request.selections)
-    if existing_quizzes + new_quiz_count > 3:
-        raise HTTPException(
-            status_code=403,
-            detail="DEMO_QUIZ_LIMIT_REACHED",
+    if current_user.email != ADMIN_EMAIL:
+        existing_quizzes = (
+            db.query(models.Quiz)
+            .filter(models.Quiz.workspace_id == workspace_id)
+            .count()
         )
+        new_quiz_count = sum(len(sel.difficulties) for sel in request.selections)
+        if existing_quizzes + new_quiz_count > 3:
+            raise HTTPException(
+                status_code=403,
+                detail="DEMO_QUIZ_LIMIT_REACHED",
+            )
     # ── END DEMO MODE ──────────────────────────────────────────────
 
     job_desc = workspace.job_description or ""

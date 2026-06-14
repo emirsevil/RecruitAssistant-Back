@@ -3,6 +3,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
+
+ADMIN_EMAIL = "e@gmail.com"
 from schemas.interview import (
     MockInterviewRequest, MockInterviewResponse,
     EvaluateRequest, FullEvaluationResponse,
@@ -195,19 +197,20 @@ def generate_mock_interview(
         raise HTTPException(status_code=400, detail="Workspace does not have a job description")
 
     # ── DEMO MODE: 1 interview per workspace ───────────────────────
-    existing_interviews = (
-        db.query(Interview)
-        .filter(
-            Interview.workspace_id == request.workspace_id,
-            Interview.status != "cancelled",
+    if current_user.email != ADMIN_EMAIL:
+        existing_interviews = (
+            db.query(Interview)
+            .filter(
+                Interview.workspace_id == request.workspace_id,
+                Interview.status != "cancelled",
+            )
+            .count()
         )
-        .count()
-    )
-    if existing_interviews >= 1:
-        raise HTTPException(
-            status_code=403,
-            detail="DEMO_INTERVIEW_LIMIT_REACHED",
-        )
+        if existing_interviews >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="DEMO_INTERVIEW_LIMIT_REACHED",
+            )
     # ── END DEMO MODE ──────────────────────────────────────────────
 
     job_description = workspace.job_description
