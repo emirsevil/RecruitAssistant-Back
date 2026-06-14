@@ -20,6 +20,7 @@ from routers.generation import router as generation_router
 from routers.interview import router as interview_router
 from routers.voice_interview import router as voice_interview_router
 from routers.upload import router as upload_router
+from routers.recruiter import router as recruiter_router
 from utils.auth import get_password_hash
 
 # Run database migrations before starting the app
@@ -88,7 +89,7 @@ ALLOWED_ORIGINS = _get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],  # Development: allow all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -107,6 +108,7 @@ app.include_router(generation_router)
 app.include_router(interview_router)
 app.include_router(voice_interview_router)
 app.include_router(upload_router)
+app.include_router(recruiter_router)
 
 # Mount uploads directory
 from fastapi.staticfiles import StaticFiles

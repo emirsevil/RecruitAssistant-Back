@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Date
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -18,6 +18,7 @@ class User(Base):
     education = Column(Text, nullable=True) # Replaces university with more detail
     skills = Column(Text, nullable=True)
     profile_image = Column(String, nullable=True) # URL for profile picture
+    is_searchable = Column(Boolean, default=False, nullable=False, server_default="false")  # Candidate consent for recruiter visibility
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # İlişkiler
@@ -30,6 +31,7 @@ class User(Base):
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
     skill_scores = relationship("SkillScore", back_populates="user", cascade="all, delete-orphan")
     weekly_goals = relationship("WeeklyGoal", back_populates="user", cascade="all, delete-orphan")
+    shortlists = relationship("Shortlist", back_populates="candidate", cascade="all, delete-orphan")
 
 # 2. CV (Özgeçmişler Tablosu)
 class CV(Base):
@@ -248,3 +250,84 @@ class WeeklyGoal(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="weekly_goals")
+
+# ═══════════════════════════════════════════════════════════════════════
+# RECRUITER PORTAL MODELS
+# ═══════════════════════════════════════════════════════════════════════
+
+# 13. COMPANY (Şirketler Tablosu)
+class Company(Base):
+    __tablename__ = "companies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    logo_url = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    recruiters = relationship("Recruiter", back_populates="company", cascade="all, delete-orphan")
+    job_openings = relationship("JobOpening", back_populates="company", cascade="all, delete-orphan")
+
+# 14. RECRUITER (Şirket Temsilcileri)
+class Recruiter(Base):
+    __tablename__ = "recruiters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    full_name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company", back_populates="recruiters")
+    refresh_tokens = relationship("RecruiterRefreshToken", back_populates="recruiter", cascade="all, delete-orphan")
+
+# 14.1 RECRUITER REFRESH TOKEN (Recruiter Oturum Yenileme Token Tablosu)
+class RecruiterRefreshToken(Base):
+    __tablename__ = "recruiter_refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recruiter_id = Column(Integer, ForeignKey("recruiters.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String, unique=True, index=True, nullable=False)
+    login_time = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    recruiter = relationship("Recruiter", back_populates="refresh_tokens")
+
+# 15. JOB OPENING (İş İlanları / Eşleştirme Merkezleri)
+class JobOpening(Base):
+    __tablename__ = "job_openings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False, index=True)
+    department = Column(String, nullable=True)
+    description = Column(Text, nullable=False)
+    required_skills = Column(Text, nullable=True)  # Comma-separated skill names
+    difficulty_level = Column(String, nullable=True)  # intern, junior, mid, senior
+    is_active = Column(Boolean, default=True, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company", back_populates="job_openings")
+    shortlists = relationship("Shortlist", back_populates="job_opening", cascade="all, delete-orphan")
+
+# 16. SHORTLIST (Aday Listeleme & Aşamalar)
+class Shortlist(Base):
+    __tablename__ = "shortlists"
+    __table_args__ = (
+        UniqueConstraint("job_opening_id", "candidate_id", name="uq_shortlist_job_candidate"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_opening_id = Column(Integer, ForeignKey("job_openings.id", ondelete="CASCADE"), nullable=False, index=True)
+    candidate_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String, default="shortlisted", nullable=False)  # shortlisted, contacted, interviewing, hired, rejected
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    job_opening = relationship("JobOpening", back_populates="shortlists")
+    candidate = relationship("User", back_populates="shortlists")

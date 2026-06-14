@@ -13,6 +13,7 @@ class UserBase(BaseModel):
     skills: Optional[str] = None
     profile_image: Optional[str] = None
     base_cv: Optional[str] = None
+    is_searchable: Optional[bool] = None  # Candidate consent for recruiter visibility
 
 class UserCreate(UserBase):
     password: str
@@ -27,6 +28,7 @@ class UserUpdate(BaseModel):
     skills: Optional[str] = None
     profile_image: Optional[str] = None
     base_cv: Optional[str] = None
+    is_searchable: Optional[bool] = None  # Toggle recruiter visibility
 
 class UserLogin(BaseModel):
     email: EmailStr
