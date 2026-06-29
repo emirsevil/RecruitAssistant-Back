@@ -60,4 +60,14 @@ def update_interview(db: Session, interview_id: int, **kwargs):
             setattr(interview, key, value)
     db.commit()
     db.refresh(interview)
+
+    # When an interview transitions to completed, refresh the candidate's
+    # persisted performance signals (recruiter-facing matching + filters).
+    # All three completion paths (text/voice/session) funnel through here.
+    if kwargs.get("status") == "completed":
+        workspace = interview.workspace
+        if workspace:
+            from services.performance import recompute_candidate_performance
+            recompute_candidate_performance(db, workspace.user_id)
+
     return interview

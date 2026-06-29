@@ -64,6 +64,12 @@ def create_quiz_score(db: Session, user_id: int, quiz_id: int,
     db.add(db_score)
     db.commit()
     db.refresh(db_score)
+
+    # Refresh the candidate's persisted performance signals so this quiz result
+    # flows through to recruiter-facing matching + talent-search filters.
+    from services.performance import recompute_candidate_performance
+    recompute_candidate_performance(db, user_id)
+
     return db_score
 
 def get_scores_by_user(db: Session, user_id: int) -> List[models.QuizScore]:

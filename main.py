@@ -69,6 +69,8 @@ def _get_allowed_origins() -> list[str]:
     default_origins = {
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
     }
 
     raw_values = [
@@ -89,7 +91,7 @@ ALLOWED_ORIGINS = _get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Development: allow all origins
+    allow_origins=ALLOWED_ORIGINS,  # explicit list — required because allow_credentials=True
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
